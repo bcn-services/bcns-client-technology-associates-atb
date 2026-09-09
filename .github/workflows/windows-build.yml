@@ -114,7 +114,7 @@ jobs:
           python verify/grow.py 2>&1 | tee grow.txt
           python verify/report.py --label "32-bit x86, x87 FPU (-m32 -mfpmath=387), static; $(head -1 runner-info.txt)" 2>&1 | tee table.md
           mkdir -p report/outputs && cp -R "$WORK"/. report/outputs/
-          cp table.md cmp.txt grow.txt run_all.txt runner-info.txt binary-check.txt report/
+          cp table.md cmp.txt grow.txt run_all.txt runner-info.txt binary-check.txt toolchain.txt report/
           cp "$WORK/report.json" report/ 2>/dev/null || true
 
       - name: Fail if any case did not run to completion
@@ -125,7 +125,7 @@ jobs:
             [ "$rc" = 0 ] || [ "$rc" = 1 ] || { echo "FAILED: $key exit $rc"; bad=1; }
             [ -s "$WORK/$sub/${base}_new.t21" ] || { echo "FAILED: $key produced no .t21"; bad=1; }
           done < "$WORK/cases.txt"
-          n=$(grep -c . "$WORK/cases.txt"); [ "$n" -eq 13 ] || { echo "FAILED: expected 13 runs (12 cases, 2638 is two steps), got $n"; bad=1; }
+          n=$(grep -c . "$WORK/cases.txt"); [ "$n" -eq 12 ] || { echo "FAILED: expected 12 runs (11 case folders, 2638 is two steps), got $n"; bad=1; }
           exit $bad
 
       - uses: actions/upload-artifact@v4
@@ -179,7 +179,7 @@ jobs:
           python verify/cmp.py  2>&1 | tee cmp.txt
           python verify/grow.py 2>&1 | tee grow.txt
           python verify/report.py --label "x86-64, SSE math, static (comparison build); $(head -1 runner-info.txt)" 2>&1 | tee table.md
-          mkdir -p report && cp table.md cmp.txt grow.txt run_all.txt runner-info.txt binary-check.txt report/
+          mkdir -p report && cp table.md cmp.txt grow.txt run_all.txt runner-info.txt binary-check.txt toolchain.txt report/
           cp "$WORK/report.json" report/ 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
