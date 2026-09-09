@@ -85,7 +85,8 @@ jobs:
             echo "## PE header"; objdump -f atb-win32.exe | grep -E 'file format|architecture';
             echo "## imported DLLs"; objdump -p atb-win32.exe | grep -i 'DLL Name';
             echo "## gfortran"; gfortran --version | head -1; } | tee binary-check.txt
-          file atb-win32.exe | grep -q 'PE32 executable.*Intel 80386' || { echo "NOT a 32-bit PE"; exit 1; }
+          objdump -f atb-win32.exe | grep -q 'file format pei-i386' || { echo "NOT a 32-bit PE (objdump)"; exit 1; }
+          file atb-win32.exe | grep -qE 'PE32 executable.*(80386|i386)' || { echo "NOT a 32-bit PE (file)"; exit 1; }
           if objdump -p atb-win32.exe | grep -i 'DLL Name' | grep -iqE 'libgfortran|libgcc|libquadmath|libwinpthread|libstdc'; then
             echo "exe imports a MinGW runtime DLL -> not statically linked"; exit 1; fi
           echo "static-link check: OK (only Windows system DLLs imported)"
