@@ -7,7 +7,9 @@ source edits were needed to compile under a modern toolchain; none touch solver 
 are listed in `README.md`. All 12 client-supplied runs (11 case folders; 2638 is a two-step
 restart pair) were run through the new executable, and every number in every output file was
 compared against the original executable's outputs. Two runs (2589 and the 2638 start run)
-reproduce the original to the printed digits over their full length. The other ten reproduce it
+agree with the original over their full length, with no value off by more than 1 part in
+10,000 (2589 is exact to every printed digit; the 2638 start run differs in the eighth or
+ninth significant digit of a few animation values). The other ten reproduce it
 exactly for an initial period, then drift as last-bit rounding differences accumulate; onset
 ranges from 48 ms to 1448 ms into the event, and once it begins the late-time values differ by
 order one. See the table for per-case onset times and magnitudes. Section 3 explains why that
@@ -81,7 +83,9 @@ Build: 32-bit x86, x87 FPU (-m32 -mfpmath=387), static; OS: Microsoft Windows Se
 - **First divergence (ms)**: first `.t21` row where any value differs by more than 1 part in a
   million; `none` means the whole run matched.
 - **Run length (ms)**: last simulated time in `.t21`, so onset reads as a fraction of the run.
-- **Result**: `bit-identical`, `matches to printed precision`, or `rounding drift after onset`.
+- **Result**: `bit-identical` (no differing number anywhere); `matches to printed precision`
+  (no value off by more than 1 part in 10,000, any remaining differences are in the seventh
+  significant digit or beyond); or `rounding drift after onset`.
 - **Runtime (s)**: wall-clock solve time on the runner.
 
 **How to read a row.** Compare **First divergence** against **Run length**. No divergence, or
@@ -114,31 +118,33 @@ limits weather forecasting. It belongs to the physical model, not the code.
 |---|---|
 | Identical to every printed digit up to a distinct onset | Wrong at step 0, or at one specific event |
 | After onset, smooth growth over many steps | Sudden jump, or a constant offset |
-| Onset moves with machine and compiler on most runs, same source | Same wrong value at the same step on every build |
+| Onset moves with machine and compiler on half the runs, same source | Same wrong value at the same step on every build |
 | Diverged values stay plausible oscillations | Values go non-physical or unbounded at once |
 
 The same source built on macOS/arm64, which uses 64-bit arithmetic and no x87, shows the same
-pattern (Appendix A). On six of the ten drifting runs the onset time moves with the hardware
-(for example 2479: 416 ms on x87, 806 ms on arm64). On the other four (2495, 2638 restart,
-2696, 2893) both builds first depart at the same output step. That is consistent with rounding,
+pattern (Appendix A). On five of the ten drifting runs the onset time moves with the hardware
+(for example 2479: 398 ms on x87, 806 ms on arm64). On the other five (2495, 2638 restart,
+2696, 2819, 2893) both builds first depart at the same output step. That is consistent with rounding,
 not against it: up to onset the printed values are identical, so the sub-printed-digit
 differences that exist before it are only amplified at the first switch event, a contact or
 joint stop, and where that event dominates, both builds tip there. A logic error would show a
 wrong value from the first step or a fixed wrong event on every build, and neither appears.
 The x87 build, which matches the original's arithmetic most closely, ends with fewer differing
-values than the arm64 build on six of the eight comparable runs, which is the direction
+values than the arm64 build on seven of the ten drifting runs, which is the direction
 rounding predicts.
 
-**The same exe on two different CPUs already disagrees.** The workflow was run twice on the
-same Windows Server 2022 image. One runner had an Intel Xeon, the other an AMD EPYC. The two
+**The same exe on two different CPUs already disagrees.** The workflow was run twice on
+Windows Server 2022 runners with the identical toolchain (runner image builds 20260907.297.1
+and 20260830.290.1, one week apart). One runner had an Intel Xeon, the other an AMD EPYC. The two
 runs built byte-identical code (the exes differ only in the link timestamp and checksum in the
 PE header). Yet case 2479 first departs from the original at 398 ms on the AMD machine and at
-416 ms on the Intel one, and every drifting case ends with a different count of differing
-values (Appendix C shows the Intel table next to the AMD table in section 2). The likely reason
+416 ms on the Intel one, and six of the ten drifting cases end with a different count of
+differing values (Appendix C shows the Intel table next to the AMD table in section 2). The likely reason
 is that the x87 transcendental instructions (sine, cosine, arctangent) are implemented in microcode and
 Intel and AMD round them differently in the last bit. Your Windows 10 machine will therefore
 produce its own onset times, and so would the original exe on a different CPU. This is the
-cleanest demonstration that the drift is arithmetic, not logic: nothing changed but the chip.
+cleanest demonstration that the drift is arithmetic, not logic: the CPU vendor is the only
+difference that touches arithmetic.
 
 **The original exe has this property too.** Two computers running the original ATBV3.exe, built
 with different compiler flags or handling x87 differently, would also disagree late in a long
@@ -204,7 +210,7 @@ coefficient, integration step, or contact model was changed.
 
 The section 2 table is from the run on an AMD EPYC 7763 runner (workflow run 34340154612). An
 earlier run of identical code on an Intel Xeon Platinum 8573C runner (run 34339508171, same
-image and toolchain) produced this table. Compare row by row with section 2: same cases match to
+toolchain, runner image one week older) produced this table. Compare row by row with section 2: same cases match to
 printed precision, same cases drift, and the onset and magnitude move with the CPU.
 
 Build: 32-bit x86, x87 FPU (-m32 -mfpmath=387), static; OS: Microsoft Windows Server 2022 Datacenter 10.0.20348 (64-bit)
