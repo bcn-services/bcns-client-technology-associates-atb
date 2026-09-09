@@ -1,0 +1,80 @@
+STOP 1
+ The was run started at:  3:51:26pm; Sep. 06, 2026
+
+ The Government makes no express or implied
+ warranty as to any matter whatsoever including the
+ conditions of the research or any product agreement
+ or of the merchantability, validity, suitability, 
+ or fitness for a particular 
+ purpose of the research or product developed from
+ the use of this software.  In no event will the
+ Government be liable to any other party for
+ compensatory, punitive, exemplary or consequential
+ damages.  The Government is neither liable nor
+ responsible for maintenance, updating or correcting
+ any errors in the provided software.  The user  
+ accepts all risks and responsibilities from the 
+ following analysis.  Please see the ATB  Users   
+ guide for information on suppressing this startup
+ message in the future.  Do you accept these terms?
+ Enter [Y/y] to accept or [N/n] to reject:
+  Enter the working directory, the default is: 
+/Users/nateseluga/.claude/jobs/2abd092a/tmp/run                                
+  The working directory for this run is: 
+ /Users/nateseluga/.claude/jobs/2abd092a/tmp/run                                
+  Specify the type of input file that will be used:
+  Listed-directed - it must have the .LIN  extension [default or L/l] or 
+  Explicit format - it must have the .AIN extension [A/a]  
+  Do you want a list-directed file, with the same filename as the .AIN file to be created with the extension .LIN?  [Default is N/n] 
+  Enter input filename, the extension ".ain" is assumed:
+
+  Enter filename for all output files extensions will be assigned:
+  (Note: existing output files with the same name will be overwritten.) 
+
+  Step      0 of     40 (   0.0% ) completed. 
+  Step      1 of     40 (   2.5% ) completed. 
+  Step      2 of     40 (   5.0% ) completed. 
+  Step      3 of     40 (   7.5% ) completed. 
+  Step      4 of     40 (  10.0% ) completed. 
+  Step      5 of     40 (  12.5% ) completed. 
+  Step      6 of     40 (  15.0% ) completed. 
+  Step      7 of     40 (  17.5% ) completed. 
+  Step      8 of     40 (  20.0% ) completed. 
+  Step      9 of     40 (  22.5% ) completed. 
+  Step     10 of     40 (  25.0% ) completed. 
+  Step     11 of     40 (  27.5% ) completed. 
+  Step     12 of     40 (  30.0% ) completed. 
+  Step     13 of     40 (  32.5% ) completed. 
+  Step     14 of     40 (  35.0% ) completed. 
+  Step     15 of     40 (  37.5% ) completed. 
+  Step     16 of     40 (  40.0% ) completed. 
+  Step     17 of     40 (  42.5% ) completed. 
+  Step     18 of     40 (  45.0% ) completed. 
+  Step     19 of     40 (  47.5% ) completed. 
+  Step     20 of     40 (  50.0% ) completed. 
+  Step     21 of     40 (  52.5% ) completed. 
+  Step     22 of     40 (  55.0% ) completed. 
+  Step     23 of     40 (  57.5% ) completed. 
+  Step     24 of     40 (  60.0% ) completed. 
+  Step     25 of     40 (  62.5% ) completed. 
+  Step     26 of     40 (  65.0% ) completed. 
+  Step     27 of     40 (  67.5% ) completed. 
+  Step     28 of     40 (  70.0% ) completed. 
+  Step     29 of     40 (  72.5% ) completed. 
+  Step     30 of     40 (  75.0% ) completed. 
+  Step     31 of     40 (  77.5% ) completed. 
+  Step     32 of     40 (  80.0% ) completed. 
+  Step     33 of     40 (  82.5% ) completed. 
+  Step     34 of     40 (  85.0% ) completed. 
+  Step     35 of     40 (  87.5% ) completed. 
+  Step     36 of     40 (  90.0% ) completed. 
+  Step     37 of     40 (  92.5% ) completed. 
+  Step     38 of     40 (  95.0% ) completed. 
+  Step     39 of     40 (  97.5% ) completed. 
+  Step     40 of     40 ( 100.0% ) completed. 
+ The run ended at:    3:51:26pm; Sep. 06, 2026
+
+  Elapsed CPU time:    0(days)  0(hr)  0(min)  0.029(sec)
+
+
+  ATB Simulation completed! 

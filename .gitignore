@@ -1,0 +1,13 @@
+# build products
+src/*.o
+src/*.mod
+src/err.txt
+src/atb
+src/atb-*.exe
+atb-macos-arm64
+atb-win32.exe
+atb-win64.exe
+# verification scratch
+verify/out/
+verify/__pycache__/
+.DS_Store

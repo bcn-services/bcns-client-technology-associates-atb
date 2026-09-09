@@ -1,0 +1,150 @@
+# Build the 32-bit Windows ATB solver and verify it against the client's reference
+# outputs on a real x86-64 runner.  Manual trigger only: Windows minutes bill at 2x
+# against the org's free tier, so nothing runs on push.
+#
+#   GITHUB_TOKEN= gh workflow run windows-build.yml --repo bcn-services/bcns-client-technology-associates-atb
+#   ... -f win64=true        # optionally also build/verify an x86_64 comparison binary (not shipped)
+name: Windows build + verification
+on:
+  workflow_dispatch:
+    inputs:
+      win64:
+        description: "Also build and verify an x86_64 comparison binary (not the deliverable)"
+        type: boolean
+        default: false
+
+jobs:
+  win32:
+    name: 32-bit x86 (deliverable)
+    # Pinned, not windows-latest, so the report can name the OS it ran on.
+    runs-on: windows-2022
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash          # Git bash; the solver is a static native exe and needs no MSYS runtime
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install MinGW-w64 (i686) gfortran via MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW32
+          update: false
+          install: >-
+            mingw-w64-i686-gcc-fortran
+            mingw-w64-i686-binutils
+            file
+
+      - name: Build (-m32 -mfpmath=387 -static)
+        shell: msys2 {0}
+        working-directory: src
+        run: |
+          gfortran --version | head -1
+          TARGET=win32 bash ../build.sh
+          cp atb-win32.exe ..
+
+      - name: Check the exe is 32-bit and statically linked
+        shell: msys2 {0}
+        run: |
+          set -o pipefail
+          { echo "## file"; file atb-win32.exe;
+            echo "## PE header"; objdump -f atb-win32.exe | grep -E 'file format|architecture';
+            echo "## imported DLLs"; objdump -p atb-win32.exe | grep -i 'DLL Name';
+            echo "## gfortran"; gfortran --version | head -1; } | tee binary-check.txt
+          file atb-win32.exe | grep -q 'PE32 executable.*Intel 80386' || { echo "NOT a 32-bit PE"; exit 1; }
+          if objdump -p atb-win32.exe | grep -i 'DLL Name' | grep -iqE 'libgfortran|libgcc|libquadmath|libwinpthread|libstdc'; then
+            echo "exe imports a MinGW runtime DLL -> not statically linked"; exit 1; fi
+          echo "static-link check: OK (only Windows system DLLs imported)"
+
+      - name: Runner info
+        shell: pwsh
+        run: |
+          $os = Get-CimInstance Win32_OperatingSystem
+          $cpu = Get-CimInstance Win32_Processor
+          "OS: $($os.Caption) $($os.Version) ($($os.OSArchitecture))" | Tee-Object runner-info.txt
+          "CPU: $($cpu.Name)" | Tee-Object -Append runner-info.txt
+          "Image: $env:ImageOS $env:ImageVersion" | Tee-Object -Append runner-info.txt
+
+      - name: Run all cases
+        run: |
+          WORK="$(cygpath -u "$RUNNER_TEMP")/w"      # short path: solver stores cwd in an 80-char string
+          echo "WORK=$WORK" >> "$GITHUB_ENV"
+          ATB="$PWD/atb-win32.exe" WORK="$WORK" bash verify/run_all.sh 2>&1 | tee run_all.txt
+
+      - name: Compare against reference outputs
+        run: |
+          export WORK
+          python verify/cmp.py  | tee cmp.txt
+          python verify/grow.py | tee grow.txt
+          python verify/report.py --label "32-bit x86, x87 FPU (-m32 -mfpmath=387), static; $(head -1 runner-info.txt)" | tee table.md
+          mkdir -p report/outputs && cp -R "$WORK"/. report/outputs/
+          cp table.md cmp.txt grow.txt run_all.txt runner-info.txt binary-check.txt report/
+          cp "$WORK/report.json" report/ 2>/dev/null || true
+
+      - name: Fail if any case did not run to completion
+        run: |
+          # normal solver exit is STOP 1; every run must also have produced its .t21
+          bad=0
+          while read key d base sub rc secs; do
+            [ "$rc" = 0 ] || [ "$rc" = 1 ] || { echo "FAILED: $key exit $rc"; bad=1; }
+            [ -s "$WORK/$sub/${base}_new.t21" ] || { echo "FAILED: $key produced no .t21"; bad=1; }
+          done < "$WORK/cases.txt"
+          exit $bad
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: atb-win32-exe
+          path: atb-win32.exe
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verification-report-win32
+          path: report/
+
+  win64:
+    name: x86-64 (comparison only, not shipped)
+    if: ${{ inputs.win64 }}
+    runs-on: windows-2022
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: mingw-w64-x86_64-gcc-fortran mingw-w64-x86_64-binutils file
+      - name: Build (x86-64, SSE math, -static)
+        shell: msys2 {0}
+        working-directory: src
+        run: |
+          TARGET=win64 bash ../build.sh
+          cp atb-win64.exe ..
+          { file atb-win64.exe; objdump -p atb-win64.exe | grep -i 'DLL Name'; } | tee ../binary-check.txt
+      - name: Runner info
+        shell: pwsh
+        run: |
+          $os = Get-CimInstance Win32_OperatingSystem
+          "OS: $($os.Caption) $($os.Version) ($($os.OSArchitecture))" | Tee-Object runner-info.txt
+      - name: Run all cases
+        run: |
+          WORK="$(cygpath -u "$RUNNER_TEMP")/w"
+          echo "WORK=$WORK" >> "$GITHUB_ENV"
+          ATB="$PWD/atb-win64.exe" WORK="$WORK" bash verify/run_all.sh 2>&1 | tee run_all.txt
+      - name: Compare against reference outputs
+        run: |
+          export WORK
+          python verify/cmp.py | tee cmp.txt
+          python verify/grow.py | tee grow.txt
+          python verify/report.py --label "x86-64, SSE math, static (comparison build); $(head -1 runner-info.txt)" | tee table.md
+          mkdir -p report && cp table.md cmp.txt grow.txt run_all.txt runner-info.txt binary-check.txt report/
+          cp "$WORK/report.json" report/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verification-report-win64
+          path: report/
