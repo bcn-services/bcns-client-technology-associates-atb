@@ -30,6 +30,10 @@ The runner OS is not the target OS. For this program that does not affect the re
   so there is no redistributable to install and no DLL version to mismatch. The build fails if
   the binary is not a 32-bit PE or imports one.
 
+**What changed for the user:** the original ran inside a Compaq QuickWin window; the new exe is
+a plain console program with the same prompts and the same input and output files. Run it from
+a Command Prompt in the case folder, or pipe the answers in as shown in `README.md`.
+
 **Not verified:** it was not run on Windows 10 22H2 itself, nor on your machines; first-run
 confirmation there is your step. Solver limits, array sizes, and model capabilities are
 unchanged. No cases beyond the 12 you supplied, so features none of them use are untested.
@@ -128,8 +132,8 @@ which is the evidence that the cause is rounding, not logic.
 ## Appendix B: source edits
 
 The eight edits are listed individually in `README.md` under "Source edits (solver logic
-unchanged)". In summary: four remove or replace Compaq-specific extensions (QuickWin windowing,
-`DFPORT`, a `DATA` statement form, a path separator), two are build-flag equivalents of Compaq
-defaults (zero-initialized and static locals), one initializes a variable Compaq happened to
-zero, and one adds a missing `DEALLOCATE` on an early `RETURN` path. No solver equation,
+unchanged)". In summary: five remove or replace Compaq-specific extensions (QuickWin windowing
+in two files, `DFPORT`, a `DATA` statement form, a path separator), one is a pair of build flags
+that reproduce Compaq defaults (zero-initialized and static locals), one initializes a variable
+Compaq happened to zero, and one adds a missing `DEALLOCATE` on an early `RETURN` path. No solver equation,
 coefficient, integration step, or contact model was changed.

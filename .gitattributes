@@ -1,0 +1,9 @@
+# Scripts must stay LF: Git-bash on the Windows runner chokes on CRLF shell scripts.
+*.sh   text eol=lf
+*.py   text eol=lf
+*.yml  text eol=lf
+*.md   text eol=lf
+# Client case data and Fortran source: never convert line endings on any platform.
+cases/** -text
+src/**   -text
+example/** -text

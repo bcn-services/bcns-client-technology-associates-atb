@@ -101,16 +101,17 @@ jobs:
 
       - name: Run all cases
         run: |
+          set -o pipefail
           WORK="$(cygpath -m "$RUNNER_TEMP")/w"   # short path (solver stores cwd in 80 chars); mixed form D:/a/_temp/w is valid for bash, the exe and Windows python
           echo "WORK=$WORK" >> "$GITHUB_ENV"
           ATB="$PWD/atb-win32.exe" WORK="$WORK" bash verify/run_all.sh 2>&1 | tee run_all.txt
 
       - name: Compare against reference outputs
         run: |
-          export WORK
-          python verify/cmp.py  | tee cmp.txt
-          python verify/grow.py | tee grow.txt
-          python verify/report.py --label "32-bit x86, x87 FPU (-m32 -mfpmath=387), static; $(head -1 runner-info.txt)" | tee table.md
+          set -o pipefail; export WORK
+          python verify/cmp.py  2>&1 | tee cmp.txt
+          python verify/grow.py 2>&1 | tee grow.txt
+          python verify/report.py --label "32-bit x86, x87 FPU (-m32 -mfpmath=387), static; $(head -1 runner-info.txt)" 2>&1 | tee table.md
           mkdir -p report/outputs && cp -R "$WORK"/. report/outputs/
           cp table.md cmp.txt grow.txt run_all.txt runner-info.txt binary-check.txt report/
           cp "$WORK/report.json" report/ 2>/dev/null || true
@@ -123,6 +124,7 @@ jobs:
             [ "$rc" = 0 ] || [ "$rc" = 1 ] || { echo "FAILED: $key exit $rc"; bad=1; }
             [ -s "$WORK/$sub/${base}_new.t21" ] || { echo "FAILED: $key produced no .t21"; bad=1; }
           done < "$WORK/cases.txt"
+          n=$(grep -c . "$WORK/cases.txt"); [ "$n" -eq 13 ] || { echo "FAILED: expected 13 runs (12 cases, 2638 is two steps), got $n"; bad=1; }
           exit $bad
 
       - uses: actions/upload-artifact@v4
@@ -166,15 +168,16 @@ jobs:
           "OS: $($os.Caption) $($os.Version) ($($os.OSArchitecture))" | Tee-Object runner-info.txt
       - name: Run all cases
         run: |
+          set -o pipefail
           WORK="$(cygpath -m "$RUNNER_TEMP")/w"   # mixed form D:/a/_temp/w: valid for bash, the exe and Windows python
           echo "WORK=$WORK" >> "$GITHUB_ENV"
           ATB="$PWD/atb-win64.exe" WORK="$WORK" bash verify/run_all.sh 2>&1 | tee run_all.txt
       - name: Compare against reference outputs
         run: |
-          export WORK
-          python verify/cmp.py | tee cmp.txt
-          python verify/grow.py | tee grow.txt
-          python verify/report.py --label "x86-64, SSE math, static (comparison build); $(head -1 runner-info.txt)" | tee table.md
+          set -o pipefail; export WORK
+          python verify/cmp.py  2>&1 | tee cmp.txt
+          python verify/grow.py 2>&1 | tee grow.txt
+          python verify/report.py --label "x86-64, SSE math, static (comparison build); $(head -1 runner-info.txt)" 2>&1 | tee table.md
           mkdir -p report && cp table.md cmp.txt grow.txt run_all.txt runner-info.txt binary-check.txt report/
           cp "$WORK/report.json" report/ 2>/dev/null || true
       - uses: actions/upload-artifact@v4
