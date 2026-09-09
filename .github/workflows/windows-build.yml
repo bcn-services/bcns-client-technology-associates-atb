@@ -35,19 +35,43 @@ jobs:
       - name: Install MinGW-w64 (i686) gfortran
         shell: msys2 {0}
         run: |
-          # MSYS2 no longer enables the 32-bit [mingw32] repo by default; the packages
-          # are still published, so enable the repo explicitly.
+          # MSYS2's current [mingw32] package database still carries gcc 16 but has dropped
+          # gcc-fortran. The last i686 gfortran build (15.2.0) is still published on
+          # repo.msys2.org, so install it by URL on top of the current toolchain deps.
+          # If that ever disappears, fall back to the winlibs MinGW-w64 i686 gfortran zip.
+          set -o pipefail
           if ! grep -q '^\[mingw32\]' /etc/pacman.conf; then
             printf '\n[mingw32]\nServer = https://mirror.msys2.org/mingw/mingw32/\nServer = https://repo.msys2.org/mingw/mingw32/\n' >> /etc/pacman.conf
           fi
           pacman -Sy --noconfirm
-          pacman -S --noconfirm --needed mingw-w64-i686-gcc-fortran mingw-w64-i686-binutils
-          which gfortran && gfortran --version | head -1
+          V=15.2.0-14; U=https://repo.msys2.org/mingw/mingw32
+          if pacman -S --noconfirm --needed mingw-w64-i686-binutils mingw-w64-i686-crt mingw-w64-i686-headers \
+               mingw-w64-i686-winpthreads mingw-w64-i686-libwinpthread mingw-w64-i686-gmp mingw-w64-i686-isl \
+               mingw-w64-i686-mpc mingw-w64-i686-mpfr mingw-w64-i686-zlib mingw-w64-i686-zstd \
+               mingw-w64-i686-libiconv mingw-w64-i686-windows-default-manifest \
+             && pacman -U --noconfirm $U/mingw-w64-i686-gcc-libs-$V-any.pkg.tar.zst $U/mingw-w64-i686-gcc-$V-any.pkg.tar.zst \
+                  $U/mingw-w64-i686-gcc-libgfortran-$V-any.pkg.tar.zst $U/mingw-w64-i686-gcc-fortran-$V-any.pkg.tar.zst \
+             && gfortran --version; then
+            echo "toolchain: MSYS2 mingw-w64-i686-gcc-fortran $V (installed by URL from repo.msys2.org)" > toolchain.txt
+          else
+            echo "MSYS2 i686 gfortran install failed; falling back to winlibs"
+            pacman -S --noconfirm --needed unzip
+            url=$(curl -s https://api.github.com/repos/brechtsanders/winlibs_mingw/releases/latest \
+                  | grep -o 'https://[^"]*winlibs-i686-posix-dwarf-gcc-[^"]*ucrt[^"]*\.zip' | head -1)
+            echo "downloading $url"; curl -sL -o winlibs.zip "$url"
+            dest=$(cygpath -u "$RUNNER_TEMP")/winlibs; mkdir -p "$dest"; unzip -q winlibs.zip -d "$dest"
+            echo "$dest/mingw32/bin" > toolchain-path.txt
+            PATH="$dest/mingw32/bin:$PATH" gfortran --version
+            echo "toolchain: winlibs MinGW-w64 i686 ($(basename "$url"))" > toolchain.txt
+          fi
+          gfortran --version | head -1 >> toolchain.txt 2>/dev/null || true
+          cat toolchain.txt
 
       - name: Build (-m32 -mfpmath=387 -static)
         shell: msys2 {0}
         working-directory: src
         run: |
+          [ -f ../toolchain-path.txt ] && export PATH="$(cat ../toolchain-path.txt):$PATH"
           gfortran --version | head -1
           TARGET=win32 bash ../build.sh
           cp atb-win32.exe ..
@@ -56,7 +80,8 @@ jobs:
         shell: msys2 {0}
         run: |
           set -o pipefail
-          { echo "## file"; file atb-win32.exe;
+          [ -f toolchain-path.txt ] && export PATH="$(cat toolchain-path.txt):$PATH"
+          { echo "## toolchain"; cat toolchain.txt; echo "## file"; file atb-win32.exe;
             echo "## PE header"; objdump -f atb-win32.exe | grep -E 'file format|architecture';
             echo "## imported DLLs"; objdump -p atb-win32.exe | grep -i 'DLL Name';
             echo "## gfortran"; gfortran --version | head -1; } | tee binary-check.txt
