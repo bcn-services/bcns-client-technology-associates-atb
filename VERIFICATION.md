@@ -22,8 +22,10 @@ Runner used for this report:
 
 ```
 OS: Microsoft Windows Server 2022 Datacenter 10.0.20348 (64-bit)
-CPU: INTEL(R) XEON(R) PLATINUM 8573C
-Image: win22 20260907.297.1
+CPU: AMD EPYC 7763 64-Core Processor                
+Image: win22 20260830.290.1
+toolchain: MSYS2 mingw-w64-i686-gcc-fortran 15.2.0-14 (installed by URL from repo.msys2.org)
+GNU Fortran (Rev14, Built by MSYS2 project) 15.2.0
 ```
 <!-- /RUNNER-INFO -->
 
@@ -54,18 +56,18 @@ unchanged. No cases beyond the 12 you supplied, so features none of them use are
 Build: 32-bit x86, x87 FPU (-m32 -mfpmath=387), static; OS: Microsoft Windows Server 2022 Datacenter 10.0.20348 (64-bit)
 | Case | Files compared | Max relative diff | Values off by >1e-4 | First divergence (ms) | Run length (ms) | Result | Runtime (s) |
 |---|---|---|---|---|---|---|---|
-| 2479 | 8 | 2 | 70751 | 416 | 4000 | rounding drift after onset | 4 |
-| 2495 | 11 | 2 | 191062 | 1092 | 6000 | rounding drift after onset | 13 |
+| 2479 | 8 | 2 | 73130 | 398 | 4000 | rounding drift after onset | 5 |
+| 2495 | 11 | 2 | 195256 | 1092 | 6000 | rounding drift after onset | 15 |
 | 2496 | 7 | 2 | 214336 | 206 | 6000 | rounding drift after onset | 4 |
-| 2513 | 13 | 2 | 42877 | 348 | 4000 | rounding drift after onset | 8 |
+| 2513 | 13 | 2 | 43750 | 348 | 4000 | rounding drift after onset | 8 |
 | 2589 | 10 | 0.028 | 0 | none | 1200 | matches to printed precision | 1 |
 | 2638_Start_135_ | 13 | 0.69 | 0 | none | 1000 | matches to printed precision | 1 |
 | 2638_135_Restart_2a | 13 | 2 | 83687 | 200 | 2000 | rounding drift after onset | 2 |
-| 2657 | 13 | 1.8 | 3385 | 370 | 1000 | rounding drift after onset | 0 |
-| 2696 | 11 | 2 | 177329 | 1448 | 6000 | rounding drift after onset | 10 |
-| 2750 | 12 | 2 | 51652 | 209 | 1000 | rounding drift after onset | 2 |
+| 2657 | 13 | 1.8 | 3385 | 370 | 1000 | rounding drift after onset | 1 |
+| 2696 | 11 | 2 | 175547 | 1448 | 6000 | rounding drift after onset | 10 |
+| 2750 | 12 | 2 | 51657 | 209 | 1000 | rounding drift after onset | 2 |
 | 2819 | 17 | 1 | 579 | 654 | 2000 | rounding drift after onset | 2 |
-| 2893 | 33 | 2 | 405916 | 48 | 2500 | rounding drift after onset | 5 |
+| 2893 | 33 | 2 | 406894 | 48 | 2500 | rounding drift after onset | 5 |
 <!-- /TABLE:win32 -->
 
 ### Column key
@@ -124,8 +126,19 @@ differences that exist before it are only amplified at the first switch event, a
 joint stop, and where that event dominates, both builds tip there. A logic error would show a
 wrong value from the first step or a fixed wrong event on every build, and neither appears.
 The x87 build, which matches the original's arithmetic most closely, ends with fewer differing
-values than the arm64 build on seven of the eight comparable runs, which is the direction
+values than the arm64 build on six of the eight comparable runs, which is the direction
 rounding predicts.
+
+**The same exe on two different CPUs already disagrees.** The workflow was run twice on the
+same Windows Server 2022 image. One runner had an Intel Xeon, the other an AMD EPYC. The two
+runs built byte-identical code (the exes differ only in the link timestamp and checksum in the
+PE header). Yet case 2479 first departs from the original at 398 ms on the AMD machine and at
+416 ms on the Intel one, and every drifting case ends with a different count of differing
+values (Appendix C shows the Intel table next to the AMD table in section 2). The likely reason
+is that the x87 transcendental instructions (sine, cosine, arctangent) are implemented in microcode and
+Intel and AMD round them differently in the last bit. Your Windows 10 machine will therefore
+produce its own onset times, and so would the original exe on a different CPU. This is the
+cleanest demonstration that the drift is arithmetic, not logic: nothing changed but the chip.
 
 **The original exe has this property too.** Two computers running the original ATBV3.exe, built
 with different compiler flags or handling x87 differently, would also disagree late in a long
@@ -186,3 +199,26 @@ in two files, `DFPORT`, a `DATA` statement form, a path separator), one is a pai
 that reproduce Compaq defaults (zero-initialized and static locals), one initializes a variable
 Compaq happened to zero, and one adds a missing `DEALLOCATE` on an early `RETURN` path. No solver equation,
 coefficient, integration step, or contact model was changed.
+
+## Appendix C: same exe, Intel runner
+
+The section 2 table is from the run on an AMD EPYC 7763 runner (workflow run 34340154612). An
+earlier run of identical code on an Intel Xeon Platinum 8573C runner (run 34339508171, same
+image and toolchain) produced this table. Compare row by row with section 2: same cases match to
+printed precision, same cases drift, and the onset and magnitude move with the CPU.
+
+Build: 32-bit x86, x87 FPU (-m32 -mfpmath=387), static; OS: Microsoft Windows Server 2022 Datacenter 10.0.20348 (64-bit)
+| Case | Files compared | Max relative diff | Values off by >1e-4 | First divergence (ms) | Run length (ms) | Result | Runtime (s) |
+|---|---|---|---|---|---|---|---|
+| 2479 | 8 | 2 | 70751 | 416 | 4000 | rounding drift after onset | 4 |
+| 2495 | 11 | 2 | 191062 | 1092 | 6000 | rounding drift after onset | 13 |
+| 2496 | 7 | 2 | 214336 | 206 | 6000 | rounding drift after onset | 4 |
+| 2513 | 13 | 2 | 42877 | 348 | 4000 | rounding drift after onset | 8 |
+| 2589 | 10 | 0.028 | 0 | none | 1200 | matches to printed precision | 1 |
+| 2638_Start_135_ | 13 | 0.69 | 0 | none | 1000 | matches to printed precision | 1 |
+| 2638_135_Restart_2a | 13 | 2 | 83687 | 200 | 2000 | rounding drift after onset | 2 |
+| 2657 | 13 | 1.8 | 3385 | 370 | 1000 | rounding drift after onset | 0 |
+| 2696 | 11 | 2 | 177329 | 1448 | 6000 | rounding drift after onset | 10 |
+| 2750 | 12 | 2 | 51652 | 209 | 1000 | rounding drift after onset | 2 |
+| 2819 | 17 | 1 | 579 | 654 | 2000 | rounding drift after onset | 2 |
+| 2893 | 33 | 2 | 405916 | 48 | 2500 | rounding drift after onset | 5 |
