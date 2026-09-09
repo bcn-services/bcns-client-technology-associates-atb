@@ -25,15 +25,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install MinGW-w64 (i686) gfortran via MSYS2
+      - name: Set up MSYS2 (MINGW32 environment)
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW32
           update: false
-          install: >-
-            mingw-w64-i686-gcc-fortran
-            mingw-w64-i686-binutils
-            file
+          install: file
+
+      - name: Install MinGW-w64 (i686) gfortran
+        shell: msys2 {0}
+        run: |
+          # MSYS2 no longer enables the 32-bit [mingw32] repo by default; the packages
+          # are still published, so enable the repo explicitly.
+          if ! grep -q '^\[mingw32\]' /etc/pacman.conf; then
+            printf '\n[mingw32]\nServer = https://mirror.msys2.org/mingw/mingw32/\nServer = https://repo.msys2.org/mingw/mingw32/\n' >> /etc/pacman.conf
+          fi
+          pacman -Sy --noconfirm
+          pacman -S --noconfirm --needed mingw-w64-i686-gcc-fortran mingw-w64-i686-binutils
+          which gfortran && gfortran --version | head -1
 
       - name: Build (-m32 -mfpmath=387 -static)
         shell: msys2 {0}
