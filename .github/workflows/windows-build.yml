@@ -67,7 +67,7 @@ jobs:
 
       - name: Run all cases
         run: |
-          WORK="$(cygpath -u "$RUNNER_TEMP")/w"      # short path: solver stores cwd in an 80-char string
+          WORK="$(cygpath -m "$RUNNER_TEMP")/w"   # short path (solver stores cwd in 80 chars); mixed form D:/a/_temp/w is valid for bash, the exe and Windows python
           echo "WORK=$WORK" >> "$GITHUB_ENV"
           ATB="$PWD/atb-win32.exe" WORK="$WORK" bash verify/run_all.sh 2>&1 | tee run_all.txt
 
@@ -132,7 +132,7 @@ jobs:
           "OS: $($os.Caption) $($os.Version) ($($os.OSArchitecture))" | Tee-Object runner-info.txt
       - name: Run all cases
         run: |
-          WORK="$(cygpath -u "$RUNNER_TEMP")/w"
+          WORK="$(cygpath -m "$RUNNER_TEMP")/w"   # mixed form D:/a/_temp/w: valid for bash, the exe and Windows python
           echo "WORK=$WORK" >> "$GITHUB_ENV"
           ATB="$PWD/atb-win64.exe" WORK="$WORK" bash verify/run_all.sh 2>&1 | tee run_all.txt
       - name: Compare against reference outputs
