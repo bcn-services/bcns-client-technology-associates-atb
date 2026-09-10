@@ -5,6 +5,7 @@ built with Compaq Visual Fortran) rebuilt with GNU gfortran. The deliverable is 
 32-bit, statically linked Windows executable built and verified on GitHub Actions.
 
 - `VERIFICATION.md` — the verification report (per-case results, what was and wasn't checked)
+- `FIXABILITY.md` — whether the late-run divergence can be removed by any build change (it cannot, and why)
 - `src/` — solver source, original ATBv3-1/ATBSourceCode with the 8 edits listed below
 - `build.sh` — the build; `TARGET=win32` for the Windows deliverable
 - `cases/` — the client's 12 example cases with the reference outputs from the original exe
@@ -54,6 +55,11 @@ A normal run ends with `STOP 1` (exit code 1).
     cd verify && WORK=/tmp/atbw python3 cmp.py    # per-file numeric diff vs reference outputs
     cd verify && WORK=/tmp/atbw python3 grow.py   # when each .t21 time history first departs, and how it grows
     cd verify && WORK=/tmp/atbw python3 report.py # the Markdown table used in VERIFICATION.md
+    python3 verify/perturb.py /tmp/cases_p13 1e-13  # a copy of cases/ with gravity scaled by 1+eps
+    python3 verify/ensemble.py <workdir> ...       # is the original inside the spread of rebuilds?
+
+A quadruple-precision comparison build (`GF` wrapper adding `-freal-8-real-16`) reproduces the same
+match/drift split; it is a diagnostic only and is not shipped.
 
 `cases/2638` holds the restart pair `2638_Start_135_` then `2638_135_Restart_2a`; `run_all.sh` runs them
 in that order in one directory. The solver has no restart-file mechanism (the second `.LIN` carries its

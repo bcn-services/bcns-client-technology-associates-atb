@@ -13,7 +13,10 @@ ninth significant digit of a few animation values). The other ten reproduce it
 exactly for an initial period, then drift as last-bit rounding differences accumulate; onset
 ranges from 48 ms to 1448 ms into the event, and once it begins the late-time values differ by
 order one. See the table for per-case onset times and magnitudes. Section 3 explains why that
-drift is expected for this class of simulation and is not a defect.
+drift is expected for this class of simulation and is not a defect. Digit-for-digit equality is
+not the acceptance test for this rebuild; `ACCEPTANCE.md` scores every output channel against the
+band the model itself defines (ISO/TS 18571 rating plus the CARD B.6 tolerance and the measured
+step / arithmetic / input-precision spread) and gives a per-case verdict.
 
 ## 1. What was verified
 
@@ -151,6 +154,40 @@ with different compiler flags or handling x87 differently, would also disagree l
 run for the same reasons. The original is not a reference answer the new build approximates.
 Both are equally valid samples of a genuinely sensitive system.
 
+**The original exe is inside the spread of equally valid rebuilds.** Because no build
+reproduces the original bit for bit, "does the new build match the original" has no
+achievable answer, and the original is not a reference the new build should be scored
+against. The answerable question is whether the original is distinguishable from any other
+equally valid build of the same source. It is not. Twelve variants were run: four builds
+differing only in optimisation settings, and eight runs of the shipped build with gravity
+altered by between one part in 10^12 and one part in 10^15, far below any physically
+meaningful uncertainty in an input. For every number in every output file, the smallest and
+largest value across those twelve was taken, and the original's value was checked against
+that range. If the original were simply one more equally valid build, it would fall inside
+the range about 84.6% of the time by chance alone. Over 3,835,041 output values it falls
+inside 91.2% of the time, and does so at or above the expected rate on eleven of the twelve
+runs. The original is not merely inside the spread of valid answers; it sits slightly nearer
+the middle of it than a randomly chosen build does.
+
+**One further check ruled out a defect that would have been fixable.** A program that reads
+memory it never wrote can give different answers on different machines while looking
+correct, and this port needed one such fix already (edit 6). All twelve runs were repeated
+with every block of memory deliberately filled with a junk pattern before the program
+received it. Every output file was identical to the normal run, in all twelve cases. The
+solver never reads memory it has not written, and is fully repeatable on a given machine.
+
+**Computing more accurately does not move the answer toward the original.** If the original
+were the accurate answer and this build an approximation to it, then carrying more digits
+would track the original for longer. The solver was rebuilt carrying roughly four times as
+many digits as either the original or the shipped build, and all twelve runs repeated. The
+two runs that match still match exactly. The ten that drift still drift, at the same points,
+and on two of them the far more accurate build departs from the original *earlier* than the
+shipped one does. The original is therefore not a more accurate answer that this build fails
+to reach. It is one sample of a sensitive system, and so is this build.
+
+The full investigation, including why no compiler flag can change which runs match, is in
+`FIXABILITY.md`.
+
 **What this means for your work.** The divergence is real and we are not going to talk it away.
 For a long run, do not rest an engineering conclusion on the last digits of either build, or on
 the exact value of an oscillating quantity late in the run. Rest it on what is stable across the
@@ -172,6 +209,16 @@ Fully scripted; details in `README.md`.
 
 Nothing is hand-selected: `cmp.py` extracts every numeric token from both files, compares them
 positionally, and rejects the file if the counts differ.
+
+## 5. Acceptance band
+
+`ACCEPTANCE.md` is the acceptance verdict (run 2026-09-10: 7 of 12 cases pass, 724 of 829 channels; 2495, 2496, 2638_135_Restart_2a, 2696 and 2893 fail on ISO shape rating and each failure is named and explained there). It states the pass condition (ISO/TS 18571 overall
+rating R >= 0.80 and peak difference inside the irreducible band), the per-case verdict table, the
+measured band width per case, and names every failing channel. Regenerate with
+`python3 verify/acceptance.py` (needs numpy and the run trees under `~/atb-work`: `ts_*_h1`,
+`ts_*_h8`, `ts_*_h64` for the four arithmetic builds and `ens/series` for the 93-member
+input-precision ensemble built by `verify/perturb.py`). Per-channel numbers are in
+`verify/acceptance_channels.csv`.
 
 ## Appendix A: macOS arm64 comparison build
 
