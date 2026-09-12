@@ -58,7 +58,7 @@ Context: `README.md` (solver, verification), `docs/TIER2-SCOPE.md` (feature list
     - Every vendor sample labels completely and `Deck.Validate()` reports nothing afterwards
     - Labelling then saving a client deck changes zero bytes
     - The three `H.1.a`-mislabelled empty rows in the client decks are relabelled and the saved file is unchanged except for those labels
-  status: not started
+  status: done
 
 - task: Generic card grid screen in `Atb.App/MainForm.cs` — one `DataGridView` over
     all lines of a card (or card group, e.g. `B.2.a` + conditional `B.2.b` as extra columns),
