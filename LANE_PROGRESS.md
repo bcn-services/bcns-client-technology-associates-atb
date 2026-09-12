@@ -5,7 +5,7 @@ LANE.md is the contract; this tracks where we are in it — if they disagree, LA
 ## Current position
 
 - **Status:** round 1 autonomous run in progress
-- **Next:** ID renumbering
+- **Next:** GEBOD body generator
 - **Blockers:** none. The labeler item's done-when says three mislabelled `H.1.a` rows, but the client decks contain only one (`2479_2.LIN` line 321), which is fixed. Nate should amend that line in LANE.md to say one. The viewer keeps ATB 3I's screen axes, where the solver's +Z points down on screen; Nate should confirm that is what "Z up on screen" meant.
 - **Last updated:** 2026-09-12
 
@@ -18,7 +18,7 @@ LANE.md is the contract; this tracks where we are in it — if they disagree, LA
 | Generic card grid screen | done — Each card now opens as a spreadsheet-style grid with named columns, and rows can be added, deleted, copied, and pasted from Excel; editing a value changes only that line of the deck. |
 | Run action | done — File > Run and File > Convert now run the solver in the background with a progress window and a Cancel button, then put the results next to the deck; both still need a first try on Windows. |
 | Animation viewer | done — The viewer now plays results with ATB 3I's colours, belts, step and speed controls, and a camera that rides with a chosen segment; it still needs a first look on Windows. |
-| ID renumbering | not started |
+| ID renumbering | done — Inserting or deleting a segment, joint, plane, or vehicle now renumbers every card that points to it and updates the counts, and deleting something still in use asks first and lists what uses it. |
 | GEBOD body generator | not started |
 | Body Summary screen | skipped — below stop marker |
 | Vehicle Motion list and sub-editors | skipped — below stop marker |

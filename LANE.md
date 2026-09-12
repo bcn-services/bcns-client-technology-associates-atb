@@ -122,7 +122,7 @@ Context: `README.md` (solver, verification), `docs/TIER2-SCOPE.md` (feature list
     - Deleting the last joint then re-adding it reproduces the original deck byte-for-byte
     - Existing passing tests remain passing
   caution: true
-  status: not started
+  status: done
 
 - task: GEBOD body generator, copying ATB 3I's `GEBOD.cs` screen — the form's fields (subject
     description, subject type, percentile or measured values, unit choices) become the typed answers
