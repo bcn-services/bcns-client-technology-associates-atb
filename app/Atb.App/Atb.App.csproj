@@ -16,4 +16,9 @@
   <ItemGroup>
     <ProjectReference Include="../Atb.Core/Atb.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Unmodified GEBOD body generator (ATB 1.3 patch) and its data file, shipped beside ATB.exe; Tools > GEBOD runs it. -->
+    <None Include="../../frontend/bin/Gebodv.exe;../../frontend/bin/GEBOD.DAT" Link="%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+  </ItemGroup>
 </Project>

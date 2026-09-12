@@ -29,6 +29,7 @@ namespace Atb.App.Solver
         public string[] Answers;              // null = SolverJob.Answers(Job, ...)
         public int SettleMs = 1500, LineGapMs = 400;
         public string HandoffDir;             // Handoff mode only: folder named in C:\ATBFIG.SYS (null = work dir; ATB 3I used System32)
+        public string? ResultFile;           // non-solver console tools (Gebodv.exe): no input deck; success = this file in WorkDir, not <out>.aou
     }
 
     public class RunResult
@@ -101,7 +102,7 @@ namespace Atb.App.Solver
                 if (o.InputBase.Length > 32 || o.OutputBase.Length > 32) { r.Error = "input/output base name longer than 32 chars"; return r; }
                 string inExt = SolverJob.InputExt(o.Job);
                 var lin = Directory.GetFiles(o.WorkDir, o.InputBase + inExt).FirstOrDefault();
-                if (lin == null) { r.Error = "no " + o.InputBase + inExt + " in " + o.WorkDir; return r; }
+                if (lin == null && o.ResultFile == null) { r.Error = "no " + o.InputBase + inExt + " in " + o.WorkDir; return r; }
                 Log("exe sha256=" + Sha256(o.ExePath) + " size=" + new FileInfo(o.ExePath).Length);
                 uint mySid; Win32.ProcessIdToSessionId((uint)Process.GetCurrentProcess().Id, out mySid);
                 Log("session: mine=" + mySid + " console=" + Win32.WTSGetActiveConsoleSessionId() + " interactive=" + Environment.UserInteractive + " fg=0x" + Win32.GetForegroundWindow().ToInt64().ToString("X") + " (" + Win32.ClassOf(Win32.GetForegroundWindow()) + ")");
@@ -122,7 +123,7 @@ namespace Atb.App.Solver
                 if (cancelled) Cancel(); // Cancel() arrived before proc was set
 
                 string[] answers = o.Answers ?? SolverJob.Answers(o.Job, o.InputBase, o.OutputBase);
-                string aou = Path.Combine(o.WorkDir, o.OutputBase + ".aou");
+                string aou = Path.Combine(o.WorkDir, o.ResultFile ?? o.OutputBase + ".aou");
 
                 if (o.Mode == FeedMode.Stdin)
                 {
@@ -189,7 +190,7 @@ namespace Atb.App.Solver
                 foreach (var f in r.Outputs) Log("output " + Path.GetFileName(f) + " " + new FileInfo(f).Length + " B sha256=" + Sha256(f));
                 bool t21 = r.Outputs.Any(f => f.EndsWith(".t21", StringComparison.OrdinalIgnoreCase) && new FileInfo(f).Length > 0);
                 r.Success = r.Error == "" && (r.ExitCode == 0 || r.ExitCode == 1) && File.Exists(aou) && new FileInfo(aou).Length > 0
-                    && (o.Job != SolverMode.ConvertAin || File.Exists(Path.Combine(o.WorkDir, o.InputBase + ".lin")));
+                    && (o.Job != SolverMode.ConvertAin || o.ResultFile != null || File.Exists(Path.Combine(o.WorkDir, o.InputBase + ".lin")));
                 Log("RESULT " + (r.Success ? "OK" : "FAIL") + " exit=" + r.ExitCode + " outputs=" + r.Outputs.Count + " t21=" + t21 + (r.Error != "" ? " error=" + r.Error : ""));
             }
             catch (Exception ex) { r.Error = ex.GetType().Name + ": " + ex.Message; Log("EXCEPTION " + ex); if (p != null) Kill(p); }

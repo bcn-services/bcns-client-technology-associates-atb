@@ -44,7 +44,9 @@ public sealed class MainForm : Form
         edit.DropDownItems.Add(Item("&Paste rows", Keys.Control | Keys.Shift | Keys.V, PasteRows));
         var view = new ToolStripMenuItem("&View");
         view.DropDownItems.Add("&Animation (.sa1)...", null, (_, _) => OpenSa1());
-        menu.Items.AddRange([file, edit, view]);
+        var tools = new ToolStripMenuItem("&Tools");
+        tools.DropDownItems.Add("&GEBOD...", null, async (_, _) => await Gebod());
+        menu.Items.AddRange([file, edit, view, tools]);
         MainMenuStrip = menu;
 
         var split = new SplitContainer { Dock = DockStyle.Fill, SplitterDistance = 300 };
@@ -344,6 +346,61 @@ public sealed class MainForm : Form
         var sa1 = Path.Combine(dir, b + ".sa1");
         if (File.Exists(sa1) && MessageBox.Show(this, "Run finished. Open the animation?", "ATB run", MessageBoxButtons.YesNo) == DialogResult.Yes)
             new AnimationForm(Sa1File.Load(sa1)).Show(this);
+    }
+
+    /// Tools > GEBOD: collect the GEBOD V.2 fields, answer the unmodified Gebodv.exe over stdin in a scratch dir
+    /// (it finds GEBOD.DAT and writes GEBOD.ain in the folder named by C:\ATBFIG.SYS), save GEBOD.ain where the
+    /// user picks, then send it through the existing .ain -> .lin convert, which opens the .lin in the grid.
+    async Task Gebod()
+    {
+        if (running || (dirty && !ConfirmDiscard())) return;
+        using var f = new GebodForm();
+        if (f.ShowDialog(this) != DialogResult.OK || f.Request == null) return;
+        using var save = new SaveFileDialog { Filter = "ATB fixed-format input (*.ain)|*.ain", FileName = "GEBOD.ain", Title = "Save GEBOD output" };
+        if (save.ShowDialog(this) != DialogResult.OK) return;
+        var req = f.Request; var dims = f.BodyDims; var dest = save.FileName;
+        var exe = Path.Combine(AppContext.BaseDirectory, "Gebodv.exe");
+        var work = Path.Combine(SolverRun.ShortWorkRoot(), "gebod");
+        var o = new RunOptions { ExePath = exe, WorkDir = work, InputBase = "GEBOD", OutputBase = "GEBOD", Mode = FeedMode.Stdin, Job = SolverMode.ConvertAin,
+            Answers = Atb.Core.Solver.Gebod.Answers(req), ResultFile = "GEBOD.ain", NoOutputAbortSec = 30, TimeoutSec = 60 };
+        var sr = new SolverRun();
+        using var prog = new RunProgressForm("GEBOD: " + req.Description);
+        prog.CancelRequested += () => Task.Run(sr.Cancel);
+        sr.Status += prog.Post;
+        running = true; MainMenuStrip!.Enabled = false;
+        prog.Show(this);
+        RunResult r;
+        const string fig = @"C:\ATBFIG.SYS";
+        try
+        {
+            r = await Task.Run(() =>
+            {
+                if (Directory.Exists(work)) Directory.Delete(work, true);
+                Directory.CreateDirectory(work);
+                File.Copy(Path.Combine(AppContext.BaseDirectory, "GEBOD.DAT"), Path.Combine(work, "GEBOD.DAT"));
+                if (dims != null) File.WriteAllText(Path.Combine(work, req.DimensionFile!), Atb.Core.Solver.Gebod.DimensionFileText(dims));
+                // Gebodv.exe opens C:\ATBFIG.SYS (status OLD, no ERR=) at start-up; keep whatever ATB 3I left there.
+                byte[]? old = File.Exists(fig) ? File.ReadAllBytes(fig) : null;
+                var tmp = Path.Combine(Environment.GetEnvironmentVariable("windir") ?? @"C:\Windows", "Temp");
+                File.WriteAllText(fig, Atb.Core.Solver.Gebod.AtbFig(work, tmp));
+                try { return sr.Run(o); }
+                finally { if (old != null) File.WriteAllBytes(fig, old); else File.Delete(fig); }
+            });
+            if (r.Success) File.Copy(Path.Combine(work, "GEBOD.ain"), dest, true);
+        }
+        catch (Exception ex)
+        {
+            var hint = ex is UnauthorizedAccessException ? "\n\nGebodv.exe reads C:\\ATBFIG.SYS; writing it may need ATB to run as administrator." : "";
+            MessageBox.Show(this, ex.Message + hint, "GEBOD", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+        finally { running = false; MainMenuStrip!.Enabled = true; prog.Finished = true; prog.Close(); }
+        try { Directory.Delete(work, true); } catch { }
+        if (r.Error == "cancelled") { status.Text = "GEBOD cancelled."; return; }
+        if (!r.Success) { MessageBox.Show(this, $"GEBOD failed (exit {r.ExitCode}): {r.Error}\n\n{sr.LogText}", "GEBOD", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        status.Text = "GEBOD wrote " + dest;
+        // ponytail: GEBOD.ain holds only the body (B) cards; ATB 3I merged it into a full deck. Converting it alone may fail — upgrade when a merge-into-deck step is specified.
+        await RunSolver(SolverMode.ConvertAin, dest);
     }
 
     void OpenSa1()
