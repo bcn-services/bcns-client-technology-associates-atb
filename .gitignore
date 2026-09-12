@@ -12,3 +12,7 @@ verify/out/
 verify/__pycache__/
 .DS_Store
 src/atb-*
+
+# .NET build output (app/)
+**/bin/
+**/obj/

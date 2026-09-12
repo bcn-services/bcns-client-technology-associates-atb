@@ -1,0 +1,29 @@
+# Build the Tier 2 desktop app (app/Atb.sln) on Windows and publish it as an artifact.
+# Manual trigger only (Windows minutes bill at 2x):
+#   GITHUB_TOKEN= gh workflow run app-build.yml --repo bcn-services/bcns-client-technology-associates-atb
+name: Desktop app build
+on:
+  workflow_dispatch:
+
+jobs:
+  app:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Test Atb.Core
+        run: dotnet test app/Atb.Core.Tests -c Release
+      - name: Publish app (self-contained x64)
+        run: dotnet publish app/Atb.App -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o out/app
+      - name: Smoke-start the app
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath out/app/ATB.exe -ArgumentList "--smoke","cases/2479/2479_2.LIN","example/sledout.sa1" -PassThru -Wait
+          if ($p.ExitCode -ne 0) { throw "ATB.exe --smoke exited $($p.ExitCode)" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: atb-app-win-x64
+          path: out/app
