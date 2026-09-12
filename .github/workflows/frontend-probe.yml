@@ -1,0 +1,49 @@
+# Front-end probe: drives the client's ORIGINAL ATBV3.exe on a Windows runner through ATBRunner.
+# Runs only on pushes to fable/frontend (budget: 12 pushes total, see ~/atb-work/NOTES_FRONTEND.md).
+name: Frontend probe (original ATBV3.exe)
+on:
+  push:
+    branches: [fable/frontend]
+
+jobs:
+  probe:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Runner info
+        shell: pwsh
+        run: |
+          $os = Get-CimInstance Win32_OperatingSystem
+          $cpu = Get-CimInstance Win32_Processor
+          "OS: $($os.Caption) $($os.Version) ($($os.OSArchitecture))" | Tee-Object runner-info.txt
+          "CPU: $($cpu.Name)" | Tee-Object -Append runner-info.txt
+          "Image: $env:ImageOS $env:ImageVersion" | Tee-Object -Append runner-info.txt
+
+      - name: Check solver hashes (must be the client's originals, untouched)
+        shell: pwsh
+        run: |
+          $h = @{ "frontend\bin\ATBV3.exe" = "291c33c8cc3af4241de41508c997c58e9d700303b6ef002cc1f478707f55a65c"; "frontend\bin\ATBV3_ATB3I.exe" = "e1187cf6790d6abae83e00809a1125f92f0aa051470f61d75b3bad9c687fc2f7" }
+          $bad = 0
+          foreach ($k in $h.Keys) { $s = (Get-FileHash -Algorithm SHA256 $k).Hash.ToLower(); "$k $s"; if ($s -ne $h[$k]) { "MISMATCH $k"; $bad = 1 } }
+          exit $bad
+
+      - name: Build ATBRunner.exe (Framework 4.8 csc, no SDK)
+        shell: cmd
+        run: frontend\build.bat
+
+      - name: Probe ladder + case runs
+        shell: pwsh
+        run: |
+          $w = "$env:RUNNER_TEMP\w"
+          & frontend\probe\p1_ladder.ps1 -Repo "$PWD" -Work $w
+          Copy-Item runner-info.txt $w\
+          Copy-Item frontend\bin\ATBRunner.exe $w\
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-probe
+          path: ${{ runner.temp }}/w/
+          if-no-files-found: error
