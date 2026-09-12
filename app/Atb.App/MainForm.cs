@@ -4,6 +4,7 @@ using Atb.App.Viewer;
 using Atb.Core.Cards;
 using Atb.Core.Lin;
 using Atb.Core.Sa1;
+using Atb.Core.Solver;
 
 namespace Atb.App;
 
@@ -12,7 +13,7 @@ public sealed class MainForm : Form
 {
     Deck? deck; string? deckPath; bool dirty, suppress;
     CardSchema.Screen? screen; Dictionary<(Kind, int), string> refs = new();
-    string? solverExe;
+    string? solverExe; bool running;
     readonly ListBox cards = new() { Dock = DockStyle.Fill, IntegralHeight = false };
     readonly DataGridView grid = new()
     {
@@ -30,6 +31,10 @@ public sealed class MainForm : Form
         file.DropDownItems.Add(Item("&Save", Keys.Control | Keys.S, Save));
         file.DropDownItems.Add("Save &As...", null, (_, _) => SaveAs());
         file.DropDownItems.Add(new ToolStripSeparator());
+        file.DropDownItems.Add(Item("&Run ATB", Keys.F5, async () => await RunDeck()));
+        file.DropDownItems.Add("Con&vert .ain to .lin...", null, async (_, _) => await ConvertAin());
+        file.DropDownItems.Add("Choose &solver executable...", null, (_, _) => solverExe = PickSolver());
+        file.DropDownItems.Add(new ToolStripSeparator());
         file.DropDownItems.Add("E&xit", null, (_, _) => Close());
         // Ctrl+Shift so plain Ctrl+C/V keep working inside a cell being edited.
         var edit = new ToolStripMenuItem("&Edit");
@@ -37,12 +42,9 @@ public sealed class MainForm : Form
         edit.DropDownItems.Add(Item("&Delete rows", Keys.Control | Keys.Delete, DeleteRows));
         edit.DropDownItems.Add(Item("&Copy rows", Keys.Control | Keys.Shift | Keys.C, CopyRows));
         edit.DropDownItems.Add(Item("&Paste rows", Keys.Control | Keys.Shift | Keys.V, PasteRows));
-        var run = new ToolStripMenuItem("&Run");
-        run.DropDownItems.Add(Item("&Run ATB", Keys.F5, async () => await RunSolver()));
-        run.DropDownItems.Add("Choose &solver executable...", null, (_, _) => solverExe = PickSolver());
         var view = new ToolStripMenuItem("&View");
         view.DropDownItems.Add("&Animation (.sa1)...", null, (_, _) => OpenSa1());
-        menu.Items.AddRange([file, edit, run, view]);
+        menu.Items.AddRange([file, edit, view]);
         MainMenuStrip = menu;
 
         var split = new SplitContainer { Dock = DockStyle.Fill, SplitterDistance = 300 };
@@ -56,7 +58,11 @@ public sealed class MainForm : Form
         grid.CellValueChanged += (_, e) => OnCellChanged(e.RowIndex, e.ColumnIndex);
         grid.CellFormatting += OnCellFormatting;
         grid.CellParsing += OnCellParsing;
-        FormClosing += (_, e) => { if (dirty && !ConfirmDiscard()) e.Cancel = true; };
+        FormClosing += (_, e) =>
+        {
+            if (running) { e.Cancel = true; status.Text = "Cancel the solver run first."; }
+            else if (dirty && !ConfirmDiscard()) e.Cancel = true;
+        };
         if (path != null) Open(path);
     }
 
@@ -227,32 +233,66 @@ public sealed class MainForm : Form
         return new[] { "atb-win32.exe", "atb.exe", "ATBV3.exe" }.Select(n => Path.Combine(here, n)).FirstOrDefault(File.Exists) ?? PickSolver();
     }
 
-    async Task RunSolver()
+    Task RunDeck()
     {
-        if (deck == null || deckPath == null) { status.Text = "Open a deck first."; return; }
+        if (deck == null || deckPath == null) { status.Text = "Open a deck first."; return Task.CompletedTask; }
         if (dirty) Save();
+        return RunSolver(SolverMode.RunLin, deckPath);
+    }
+
+    Task ConvertAin()
+    {
+        if (running || (dirty && !ConfirmDiscard())) return Task.CompletedTask;
+        using var d = new OpenFileDialog { Filter = "ATB fixed-format input (*.ain)|*.ain;*.AIN", Title = "Convert .ain to .lin" };
+        return d.ShowDialog(this) == DialogResult.OK ? RunSolver(SolverMode.ConvertAin, d.FileName) : Task.CompletedTask;
+    }
+
+    /// Run or convert through SolverRun (stdin feed) in a fresh scratch dir; SolverJob.Finish copies the outputs
+    /// next to the input file and deletes the scratch dir. Solver work and cleanup run off the UI thread.
+    async Task RunSolver(SolverMode job, string input)
+    {
+        if (running) return;
         solverExe ??= FindSolver();
         if (solverExe == null) return;
-        var b = Path.GetFileNameWithoutExtension(deckPath);
-        var work = Path.Combine(SolverRun.ShortWorkRoot(), DateTime.Now.ToString("HHmmss"));
-        Directory.CreateDirectory(work);
-        File.Copy(deckPath, Path.Combine(work, b + ".lin"), true);
-        var o = new RunOptions { ExePath = solverExe, WorkDir = work, InputBase = b, OutputBase = b, Mode = FeedMode.Stdin };
+        var b = Path.GetFileNameWithoutExtension(input);
+        string verb = job == SolverMode.ConvertAin ? "Convert" : "Run";
+        // Stdin is the one feed mode that needs neither window focus nor Handoff (which writes C:\ATBFIG.SYS and sweeps System32).
+        var work = Path.Combine(SolverRun.ShortWorkRoot(), Guid.NewGuid().ToString("N")[..8]);
+        var o = new RunOptions { ExePath = solverExe, WorkDir = work, InputBase = b, OutputBase = b, Mode = FeedMode.Stdin, Job = job };
         var sr = new SolverRun();
-        sr.Status += s => BeginInvoke(() => status.Text = s);
-        UseWaitCursor = true;
-        var r = await Task.Run(() => sr.Run(o));
-        UseWaitCursor = false;
-        if (!r.Success)
+        using var prog = new RunProgressForm($"ATB {verb.ToLowerInvariant()}: {Path.GetFileName(input)}");
+        prog.CancelRequested += () => Task.Run(sr.Cancel);
+        sr.Status += prog.Post;
+        running = true; MainMenuStrip!.Enabled = false;
+        prog.Show(this);
+        RunResult r; List<string> outs;
+        try
         {
-            MessageBox.Show(this, $"Solver failed (exit {r.ExitCode}): {r.Error}\n\n{sr.LogText}", "ATB run", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            (r, outs) = await Task.Run(() =>
+            {
+                Directory.CreateDirectory(work);
+                File.Copy(input, Path.Combine(work, b + SolverJob.InputExt(job)), true);
+                var res = sr.Run(o);
+                return (res, SolverJob.Finish(work, b, input, job, cancelled: res.Error == "cancelled"));
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, $"ATB {verb}", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
-        var dest = Path.GetDirectoryName(deckPath)!;
-        foreach (var f in r.Outputs) File.Copy(f, Path.Combine(dest, Path.GetFileName(f)), true);
-        try { Directory.Delete(work, true); } catch { /* scratch */ }
-        status.Text = $"Run finished in {r.ElapsedSec:F1} s: {string.Join(", ", r.Outputs.Select(Path.GetFileName))}";
-        var sa1 = Path.Combine(dest, b + ".sa1");
+        finally { running = false; MainMenuStrip!.Enabled = true; prog.Finished = true; prog.Close(); }
+
+        if (r.Error == "cancelled") { status.Text = $"{verb} cancelled."; return; }
+        if (!r.Success)
+        {
+            MessageBox.Show(this, $"Solver failed (exit {r.ExitCode}): {r.Error}\n\n{sr.LogText}", $"ATB {verb}", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+        status.Text = $"{verb} finished in {r.ElapsedSec:F1} s: {string.Join(", ", outs.Select(Path.GetFileName))}";
+        var dir = Path.GetDirectoryName(Path.GetFullPath(input))!;
+        if (job == SolverMode.ConvertAin) { Open(Path.Combine(dir, b + ".lin")); return; }
+        var sa1 = Path.Combine(dir, b + ".sa1");
         if (File.Exists(sa1) && MessageBox.Show(this, "Run finished. Open the animation?", "ATB run", MessageBoxButtons.YesNo) == DialogResult.Yes)
             new AnimationForm(Sa1File.Load(sa1)).Show(this);
     }

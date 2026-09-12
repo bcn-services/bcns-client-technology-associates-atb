@@ -11,6 +11,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
+using Atb.Core.Solver;
 
 namespace Atb.App.Solver
 {
@@ -20,11 +21,12 @@ namespace Atb.App.Solver
     {
         public string ExePath, WorkDir, InputBase, OutputBase;
         public FeedMode Mode = FeedMode.PostChar;
+        public SolverMode Job = SolverMode.RunLin; // 101 run .lin, 102 convert .ain -> .lin
         public int TimeoutSec = 900;          // hard cap for one solver run
         public int NoOutputAbortSec = 45;     // if no .aou appears this long after feeding, the input route failed
         public string LogPath, ScreenshotDir;
         public bool DeleteParms = true, SeedParms = false, EnumOnly = false, Foreground = false;
-        public string[] Answers;              // null = standard 5 answers
+        public string[] Answers;              // null = SolverJob.Answers(Job, ...)
         public int SettleMs = 1500, LineGapMs = 400;
         public string HandoffDir;             // Handoff mode only: folder named in C:\ATBFIG.SYS (null = work dir; ATB 3I used System32)
     }
@@ -42,8 +44,18 @@ namespace Atb.App.Solver
         readonly StringBuilder log = new StringBuilder();
         StreamWriter logFile;
         Stopwatch sw;
+        volatile Process? proc;
+        volatile bool cancelled;
 
         public string LogText { get { return log.ToString(); } }
+
+        /// Callable from any thread: kills the solver's process tree; Run() then returns with Error "cancelled".
+        public void Cancel()
+        {
+            cancelled = true;
+            var p = proc;
+            try { if (p != null && !p.HasExited) p.Kill(true); } catch { }
+        }
 
         void Log(string s)
         {
@@ -72,22 +84,7 @@ namespace Atb.App.Solver
             using (var f = File.OpenRead(path)) using (var h = SHA256.Create()) return BitConverter.ToString(h.ComputeHash(f)).Replace("-", "").ToLowerInvariant();
         }
 
-        static readonly string[] OutExts = { ".aou", ".sa1", ".dbg", ".tp1", ".st1", ".st2" };
-        static bool IsOutputExt(string ext)
-        {
-            ext = ext.ToLowerInvariant();
-            if (OutExts.Contains(ext)) return true;
-            return ext.Length == 4 && ext[0] == '.' && ext[1] == 't' && char.IsDigit(ext[2]) && char.IsDigit(ext[3]);
-        }
-
-        public static List<string> OutputsOf(string workDir, string outBase)
-        {
-            var list = new List<string>();
-            foreach (var p in Directory.GetFiles(workDir, outBase + ".*"))
-                if (string.Equals(Path.GetFileNameWithoutExtension(p), outBase, StringComparison.OrdinalIgnoreCase) && IsOutputExt(Path.GetExtension(p))) list.Add(p);
-            list.Sort(StringComparer.OrdinalIgnoreCase);
-            return list;
-        }
+        public static List<string> OutputsOf(string workDir, string outBase) { return SolverJob.Outputs(workDir, outBase); }
 
         public RunResult Run(RunOptions o)
         {
@@ -102,8 +99,9 @@ namespace Atb.App.Solver
                 if (!Directory.Exists(o.WorkDir)) { r.Error = "work dir not found: " + o.WorkDir; return r; }
                 if (o.WorkDir.Length > 79) { r.Error = "work dir path longer than 79 chars (solver stores it in an 80-char field): " + o.WorkDir; return r; }
                 if (o.InputBase.Length > 32 || o.OutputBase.Length > 32) { r.Error = "input/output base name longer than 32 chars"; return r; }
-                string lin = Directory.GetFiles(o.WorkDir, o.InputBase + ".lin").FirstOrDefault();
-                if (lin == null) { r.Error = "no " + o.InputBase + ".lin in " + o.WorkDir; return r; }
+                string inExt = SolverJob.InputExt(o.Job);
+                var lin = Directory.GetFiles(o.WorkDir, o.InputBase + inExt).FirstOrDefault();
+                if (lin == null) { r.Error = "no " + o.InputBase + inExt + " in " + o.WorkDir; return r; }
                 Log("exe sha256=" + Sha256(o.ExePath) + " size=" + new FileInfo(o.ExePath).Length);
                 uint mySid; Win32.ProcessIdToSessionId((uint)Process.GetCurrentProcess().Id, out mySid);
                 Log("session: mine=" + mySid + " console=" + Win32.WTSGetActiveConsoleSessionId() + " interactive=" + Environment.UserInteractive + " fg=0x" + Win32.GetForegroundWindow().ToInt64().ToString("X") + " (" + Win32.ClassOf(Win32.GetForegroundWindow()) + ")");
@@ -119,9 +117,11 @@ namespace Atb.App.Solver
                 var psi = new ProcessStartInfo(o.ExePath);
                 psi.WorkingDirectory = o.WorkDir; psi.UseShellExecute = false; psi.RedirectStandardInput = (o.Mode == FeedMode.Stdin);
                 p = Process.Start(psi);
+                proc = p;
                 Log("started pid=" + p.Id);
+                if (cancelled) Cancel(); // Cancel() arrived before proc was set
 
-                string[] answers = o.Answers ?? new[] { "y", "", "l", o.InputBase, o.OutputBase };
+                string[] answers = o.Answers ?? SolverJob.Answers(o.Job, o.InputBase, o.OutputBase);
                 string aou = Path.Combine(o.WorkDir, o.OutputBase + ".aou");
 
                 if (o.Mode == FeedMode.Stdin)
@@ -143,7 +143,7 @@ namespace Atb.App.Solver
                 r.SecToWindow = sw.Elapsed.TotalSeconds;
                 if (frame == IntPtr.Zero) Log("no visible top-level window after 20 s (exited=" + p.HasExited + ")");
                 else Log("frame window seen: " + Win32.Info(frame, 0));
-                Thread.Sleep(o.SettleMs);
+                if (!cancelled) Thread.Sleep(o.SettleMs);
                 DumpWindows(p.Id, "after settle");
                 Shot(o, "01-window");
 
@@ -161,6 +161,7 @@ namespace Atb.App.Solver
                 while (true)
                 {
                     if (p.WaitForExit(250)) break;
+                    if (cancelled) { Kill(p); break; }
                     double now = sw.Elapsed.TotalSeconds;
                     if (!aouSeen && (File.Exists(aou) || (o.Mode == FeedMode.Handoff && File.Exists(Path.Combine(o.HandoffDir ?? o.WorkDir, o.OutputBase + ".aou"))))) { aouSeen = true; r.SecToAou = now; Log(".aou appeared: input accepted"); Shot(o, "03-running"); }
                     if (aouSeen && now - lastProgress > 5) { lastProgress = now; var fi = new FileInfo(aou); Log("progress: .aou " + fi.Length + " bytes"); }
@@ -183,10 +184,12 @@ namespace Atb.App.Solver
                 try { r.ExitCode = p.ExitCode; } catch { }
                 Log("process exited code=" + r.ExitCode + " after " + r.SecToExit.ToString("F1") + " s; dialogs dismissed=" + r.DialogsDismissed);
                 if (o.Mode == FeedMode.Handoff) SweepHandoffOutputs(o);
-                r.Outputs = OutputsOf(o.WorkDir, o.OutputBase);
+                if (cancelled) r.Error = "cancelled";
+                r.Outputs = SolverJob.Outputs(o.WorkDir, o.OutputBase, o.Job);
                 foreach (var f in r.Outputs) Log("output " + Path.GetFileName(f) + " " + new FileInfo(f).Length + " B sha256=" + Sha256(f));
                 bool t21 = r.Outputs.Any(f => f.EndsWith(".t21", StringComparison.OrdinalIgnoreCase) && new FileInfo(f).Length > 0);
-                r.Success = r.Error == "" && (r.ExitCode == 0 || r.ExitCode == 1) && File.Exists(aou) && new FileInfo(aou).Length > 0;
+                r.Success = r.Error == "" && (r.ExitCode == 0 || r.ExitCode == 1) && File.Exists(aou) && new FileInfo(aou).Length > 0
+                    && (o.Job != SolverMode.ConvertAin || File.Exists(Path.Combine(o.WorkDir, o.InputBase + ".lin")));
                 Log("RESULT " + (r.Success ? "OK" : "FAIL") + " exit=" + r.ExitCode + " outputs=" + r.Outputs.Count + " t21=" + t21 + (r.Error != "" ? " error=" + r.Error : ""));
             }
             catch (Exception ex) { r.Error = ex.GetType().Name + ": " + ex.Message; Log("EXCEPTION " + ex); if (p != null) Kill(p); }
@@ -207,8 +210,8 @@ namespace Atb.App.Solver
             try { File.WriteAllText(fig, content); Log("handoff: wrote " + fig + " = " + content.Replace("\r\n", "|")); }
             catch (Exception ex) { r.Error = "cannot write " + fig + " (the ATB 3I installer wrote it as admin): " + ex.Message; Log(r.Error); return false; }
             File.Copy(lin, Path.Combine(dir, "winintm.sys"), true);
-            File.WriteAllText(Path.Combine(dir, "execatb.dat"), "101\r\n" + o.OutputBase + "\r\n");
-            Log("handoff: wrote winintm.sys (copy of " + Path.GetFileName(lin) + ") and execatb.dat [101|" + o.OutputBase + "] in " + dir);
+            File.WriteAllText(Path.Combine(dir, "execatb.dat"), (int)o.Job + "\r\n" + o.OutputBase + "\r\n");
+            Log("handoff: wrote winintm.sys (copy of " + Path.GetFileName(lin) + ") and execatb.dat [" + (int)o.Job + "|" + o.OutputBase + "] in " + dir);
             Thread.Sleep(500);
             return true;
         }
