@@ -36,6 +36,8 @@ public sealed class DeckLine
     public int Int(int i) => (int)Math.Round(Num(i));
 
     public void Set(int i, string rawToken) { Tokens[i] = rawToken; Raw = null; }
+    /// Labeler hook: new label plus the text to write back (null = regenerate from tokens).
+    internal void Relabel(string label, string? raw) { Label = label; Raw = raw; }
     public void SetStr(int i, string s) => Set(i, "\"" + s + "\"");
     public void SetNum(int i, double v) => Set(i, FormatNum(v));
     public void SetInt(int i, int v) => Set(i, v.ToString(CultureInfo.InvariantCulture));

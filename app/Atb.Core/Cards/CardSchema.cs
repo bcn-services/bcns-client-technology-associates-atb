@@ -136,6 +136,8 @@ public static class CardSchema
         V("F.7.C", "after F.7.B when Blocking != 0", "1-18 segment/ellipsoid pairs", t => t.Count is >= 2 and <= 36 && t.Count % 2 == 0,
           "g:Blocking Segment", "i:Blocking Ellip");
         F("F.8.A", "one per harness (D.1.A NHRNSS)", Cat(Seq("i:Belts in Harness #", 5), ["i:Max Iteration", "r:Max Strain Convergence"]));
+        // solver src/input_harness.for:107 (NPTSPB); ATB 3I ReadFile reads it only for harnesses with belts.
+        V("F.8.B", "one per harness with F.8.A belts > 0, one value per belt", Per18, UpTo18, "i:Points per Belt");
         F("F.8.C", "one per harness belt", "f:Strain F1", "f:Strain F2", "f:Strain F3", "f:Strain F4", "i:Not Used", "r:Initial Slack");
         F("F.8.D1", "one per belt point", Cat(["g:Ref Point Segment", "i:Ref Point Ellip", "i:Preferred Direction", "r:Delta R"], FiveFuncs, Xyz("r", "Point Loc")));
         F("F.8.D2", "after F.8.D1", Cat(Xyz("r", "Offset"), Xyz("r", "Direction Vec")));

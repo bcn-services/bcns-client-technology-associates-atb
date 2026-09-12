@@ -13,7 +13,7 @@ public sealed class Deck
 
     static readonly Regex TokenRx = new("\"[^\"]*\"|\\S+", RegexOptions.Compiled);
     // Label = the last "CARD x.y" run on the line, any case, preceded by start-of-line or whitespace.
-    static readonly Regex LabelRx = new(@"(?i)(?:^|\s)(CARD\s+[A-Z0-9.]+)\s*$", RegexOptions.Compiled);
+    internal static readonly Regex LabelRx = new(@"(?i)(?:^|\s)(CARD\s+[A-Z0-9.]+)\s*$", RegexOptions.Compiled);
 
     public static Deck Load(string path)
     {
