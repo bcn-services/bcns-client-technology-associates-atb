@@ -4,7 +4,7 @@ param([string]$Repo = (Resolve-Path "$PSScriptRoot\..\.."), [string]$Out = "$env
 $ErrorActionPreference = "Stop"
 $fe = "$Repo\frontend"
 New-Item -ItemType Directory -Force "$Out\cases" | Out-Null
-Copy-Item "$fe\bin\ATBRunner.exe", "$fe\bin\ATBV3.exe", "$fe\package\README.txt", "$fe\package\verify.bat", "$fe\package\volatile.txt" $Out -Force
+Copy-Item "$fe\bin\ATBRunner.exe", "$fe\bin\ATBV3.exe", "$fe\package\README.txt", "$fe\package\CLIENT_TEST.md", "$fe\package\verify.bat", "$fe\package\volatile.txt" $Out -Force
 $cases = @(); $hashes = @()
 foreach ($d in (Get-ChildItem "$Repo\cases" -Directory | Sort-Object Name)) {
   New-Item -ItemType Directory -Force "$Out\cases\$($d.Name)" | Out-Null

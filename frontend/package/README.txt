@@ -45,10 +45,22 @@ VERIFYING (verify.bat)
   Double-click verify.bat (or run it from a command prompt). It runs all 12 reference
   cases (about 5-10 minutes) and prints IDENTICAL or DIFFERS for each one, then a
   summary line. Results are also appended to verify-results.txt next to it.
+  verify.bat exit code: 0 = all 12 IDENTICAL, 1 = at least one DIFFERS, 3 = at least one
+  case failed to run. A DIFFERS exit is a report, not a fault (see below).
+  How a case is judged: each output file has its date/time/CPU/folder lines (listed in
+  volatile.txt) replaced by the word <VOLATILE>, every line ends with a single newline,
+  and the SHA-256 of that text is compared with cases\reference-hashes.txt.
   DIFFERS on a case means a numeric result differs from the reference output that was
-  produced on the original machine; the logs under C:\Users\Public\ATBRun\verify say which
-  file. Differences can come from the CPU/floating-point hardware, not only from the
-  front end, so a DIFFERS result should be sent back with verify-results.txt attached.
+  produced on the original machine in April 2022; the line after the summary names the
+  files, and the run itself is kept under C:\Users\Public\ATBRun\verify.
+  What DIFFERS usually means: the 2005 solver's arithmetic depends on the CPU it runs
+  on. During our tests the same unmodified ATBV3.exe, fed the same deck, gave different
+  late-time results on an AMD EPYC and on an Intel Xeon (cases with long contact phases
+  drift apart after a step-size retry). The front end, the input route and the ATB 3I
+  copy of the solver made no difference at all: on one machine every route gave the same
+  bytes. So on the 2022 machine expect 12 IDENTICAL; on a different CPU some cases may
+  print DIFFERS even though nothing is wrong with the front end. Send verify-results.txt
+  and the verify folder either way so we can show you which lines differ.
 
 WHAT ATBRUNNER DOES TO ANSWER THE PROMPTS
   It posts the keystrokes ("y", Enter, "l", input name, output name) to the solver's
