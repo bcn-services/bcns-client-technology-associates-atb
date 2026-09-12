@@ -19,7 +19,7 @@ LANE.md is the contract; this tracks where we are in it — if they disagree, LA
 | Run action | done — File > Run and File > Convert now run the solver in the background with a progress window and a Cancel button, then put the results next to the deck; both still need a first try on Windows. |
 | Animation viewer | done — The viewer now plays results with ATB 3I's colours, belts, step and speed controls, and a camera that rides with a chosen segment; it still needs a first look on Windows. |
 | ID renumbering | done — Inserting or deleting a segment, joint, plane, or vehicle now renumbers every card that points to it and updates the counts, and deleting something still in use asks first and lists what uses it. |
-| GEBOD body generator | not started |
+| GEBOD body generator | done — Tools > GEBOD opens a copy of ATB 3I's body generator form and runs the original GEBOD program behind it; the body it makes holds only the body cards, so turning it into a full runnable deck still needs a step Nate has to specify, and it still needs a first try on Windows. |
 | Body Summary screen | skipped — below stop marker |
 | Vehicle Motion list and sub-editors | skipped — below stop marker |
 | Function editors | skipped — below stop marker |

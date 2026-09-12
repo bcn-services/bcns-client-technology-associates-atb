@@ -141,7 +141,7 @@ Context: `README.md` (solver, verification), `docs/TIER2-SCOPE.md` (feature list
     - An `Atb.Core` function turns a GEBOD request record into the ordered stdin answer lines, and the prompt→answer mapping is unit-tested for the percentile path and the measured-values path
     - `frontend/bin/Gebodv.exe` and `frontend/bin/GEBOD.DAT` are in the repo and the publish step copies them beside `ATB.exe`
     - `dotnet build app/Atb.sln` passes with a Tools > GEBOD menu item opening the form
-  status: not started
+  status: done
 
 > **⚠️ AUTONOMOUS RUN — STOP HERE**
 
