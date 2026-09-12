@@ -20,9 +20,6 @@ static class Fixtures
         Directory.GetFiles(Path.Combine(RepoRoot, "cases"), "*.sa1", SearchOption.AllDirectories).OrderBy(x => x);
 
     /// General Dynamics sample decks shipped in the ATB 3I installer (hand-written layout, not ATB 3I output).
-    public static IEnumerable<string> VendorSamples()
-    {
-        var d = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "atb-work/p0/msi/General Dynamics/Samples");
-        return Directory.Exists(d) ? Directory.GetFiles(d, "*.lin").OrderBy(x => x) : Array.Empty<string>();
-    }
+    public static IEnumerable<string> VendorSamples() =>
+        Directory.GetFiles(Path.Combine(RepoRoot, "app/Atb.Core.Tests/fixtures/vendor"), "*.lin").OrderBy(x => x);
 }
