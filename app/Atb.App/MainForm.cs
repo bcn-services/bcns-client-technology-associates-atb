@@ -164,9 +164,33 @@ public sealed class MainForm : Form
         status.Text = $"{what}: {lines.Count} line(s) added. Count cards (B.1, D.1.a, ...) are not updated.";
     }
 
-    // ponytail: "add" duplicates the selected row as its template — a blank-from-schema row can come with the renumbering item.
+    // Screens with one row per segment / joint / plane / vehicle: add and delete go through Renumber.
+    static Entity? EntityOf(CardSchema.Screen s) => s.Cards[0] switch
+    {
+        "B.2.A" or "B.6" or "G.3.A" => Entity.Segment,
+        "B.3.A" or "B.4.A" or "B.5.A" => Entity.Joint,
+        "D.2.A" => Entity.Plane,
+        "C.1" or "C.2.A" => Entity.Vehicle,
+        _ => null,
+    };
+
+    int[] SelectedIndexes() => grid.SelectedCells.Cast<DataGridViewCell>().Select(c => c.RowIndex).Where(i => i >= 0).Distinct().Order().ToArray();
+
+    // ponytail: "add" duplicates the selected row as its template — a blank-from-schema row is not offered.
     void AddRow()
     {
+        if (deck != null && screen != null && EntityOf(screen) is { } e)
+        {
+            var sel = SelectedIndexes();
+            if (sel.Length == 0) { status.Text = "Select a row to copy as the new row."; return; }
+            grid.EndEdit();
+            int n = sel[^1] + 1, at = e == Entity.Vehicle ? n : n + 1;   // a vehicle goes before the selected one: the primary stays last
+            try { Renumber.Insert(deck, e, at, Renumber.Copy(deck, e, n)); }
+            catch (Exception ex) when (ex is InvalidOperationException or ArgumentOutOfRangeException) { status.Text = ex.Message; return; }
+            dirty = true; ShowScreen(screen);
+            status.Text = $"Added {e.ToString().ToLowerInvariant()} {at} as a copy; references and count cards renumbered.";
+            return;
+        }
         if (SelectedRows().LastOrDefault() is not { } row) { status.Text = "Select a row to copy as the new row."; return; }
         InsertLines(row.OfType<DeckLine>().Select(l => new DeckLine(l.Tokens, l.Label)).ToList(), "Add row");
     }
@@ -174,12 +198,37 @@ public sealed class MainForm : Form
     void DeleteRows()
     {
         if (deck == null || screen == null) return;
+        if (EntityOf(screen) is { } e)
+        {
+            grid.EndEdit();
+            int done = 0;
+            foreach (var i in SelectedIndexes().Reverse())                  // highest first: lower numbers stay valid
+            {
+                int n = i + 1;
+                try { if (Renumber.Delete(deck, e, n, refs => ConfirmDelete(e, n, refs)) != null) done++; }
+                catch (InvalidOperationException ex) { status.Text = ex.Message; }
+            }
+            if (done == 0) return;
+            dirty = true; ShowScreen(screen);
+            status.Text = $"Deleted {done} {e.ToString().ToLowerInvariant()}(s); references and count cards renumbered.";
+            return;
+        }
         var rows = SelectedRows();
         if (rows.Length == 0) return;
         grid.EndEdit();
         foreach (var l in rows.SelectMany(r => r.OfType<DeckLine>())) deck.Lines.Remove(l);
         dirty = true; ShowScreen(screen);
         status.Text = $"Deleted {rows.Length} row(s). Count cards (B.1, D.1.a, ...) are not updated.";
+    }
+
+    /// Asks before deleting an entity that other cards still refer to, listing each referencing line.
+    bool ConfirmDelete(Entity e, int n, IReadOnlyList<RefSite> refs)
+    {
+        var lines = refs.GroupBy(r => (r.Line, r.Label)).Select(g => $"line {g.Key.Line}  {g.Key.Label}: {string.Join(", ", g.Select(r => r.Field))}").ToList();
+        var text = $"{e} {n} is still referenced by {lines.Count} line(s):\n\n" + string.Join("\n", lines.Take(25))
+                 + (lines.Count > 25 ? $"\n... and {lines.Count - 25} more" : "")
+                 + "\n\nDelete it anyway? As in ATB 3I, contact/constraint/force rows that depend on it are deleted and other references are cleared.";
+        return MessageBox.Show(this, text, $"Delete {e.ToString().ToLowerInvariant()}", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes;
     }
 
     void CopyRows()

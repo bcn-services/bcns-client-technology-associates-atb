@@ -122,7 +122,7 @@ public sealed class Deck
         error = null;
         var v = text.Trim();
         if (kind == Kind.Str || (kind == null && quoted)) return "\"" + text.Replace('"', '\'') + "\"";
-        bool whole = kind is Kind.Int or Kind.SegRef or Kind.JointRef or Kind.PlaneRef or Kind.FuncRef;
+        bool whole = kind is Kind.Int or Kind.SegRef or Kind.JointRef or Kind.PlaneRef or Kind.FuncRef or Kind.EllipRef;
         bool ok = whole ? int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out _)
                         : double.TryParse(v.Replace('D', 'E').Replace('d', 'e'), NumberStyles.Float, CultureInfo.InvariantCulture, out _);
         if (ok) return v;

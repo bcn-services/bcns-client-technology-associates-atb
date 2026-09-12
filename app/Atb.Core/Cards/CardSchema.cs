@@ -1,6 +1,8 @@
 namespace Atb.Core.Cards;
 
-public enum Kind { Str, Int, Real, SegRef, JointRef, PlaneRef, FuncRef }
+/// EllipRef: an ellipsoid number, which shares the segment numbering (segment n's own ellipsoid is n;
+/// extra D.5 ellipsoids take ids past the segments) — ATB 3I ATBUpdate.UpdateSegmentID shifts it with segments.
+public enum Kind { Str, Int, Real, SegRef, JointRef, PlaneRef, FuncRef, EllipRef }
 
 /// One CARD label: field names and kinds in token order, when the card appears, and (for cards
 /// whose token count varies) the rule the count must satisfy. Fixed cards: count == Names.Length.
@@ -31,9 +33,9 @@ public sealed record CardSpec(string Label, string[] Names, Kind[] Kinds, string
 /// appearance conditions from ATB 3I FileManager.WriteFile.
 public static class CardSchema
 {
-    // Field spec "k:Name": s=Str i=Int r=Real g=SegRef j=JointRef p=PlaneRef f=FuncRef.
+    // Field spec "k:Name": s=Str i=Int r=Real g=SegRef j=JointRef p=PlaneRef f=FuncRef e=EllipRef.
     static readonly Dictionary<char, Kind> KindCode = new()
-    { ['s'] = Kind.Str, ['i'] = Kind.Int, ['r'] = Kind.Real, ['g'] = Kind.SegRef, ['j'] = Kind.JointRef, ['p'] = Kind.PlaneRef, ['f'] = Kind.FuncRef };
+    { ['s'] = Kind.Str, ['i'] = Kind.Int, ['r'] = Kind.Real, ['g'] = Kind.SegRef, ['j'] = Kind.JointRef, ['p'] = Kind.PlaneRef, ['f'] = Kind.FuncRef, ['e'] = Kind.EllipRef };
 
     static int Lead(IReadOnlyList<string> t, int i = 0) =>
         t.Count > i && int.TryParse(t[i], out var n) && n >= 0 ? n : -1;
@@ -108,11 +110,12 @@ public static class CardSchema
         // D: contact surfaces and restraints
         F("D.1.A", "always", "i:NPL", "i:NBLT", "i:NBAG", "i:NELP", "i:NQ", "i:NSD", "i:NHRNSS", "i:NWINDF", "i:NJNTFOLD", "i:NFORCE", "i:NWATER", "i:NEXTCD");
         F("D.1.B", "when D.1.A NEXTCD = 1", "i:NRTORQ");
-        F("D.2.A", "one set per plane (D.1.A NPL)", "i:PlaneID", "s:Title");
+        // PlaneID is the plane's own number (ATB 3I ATBGrid renumbers it on insert/delete), so it is marked p.
+        F("D.2.A", "one set per plane (D.1.A NPL)", "p:PlaneID", "s:Title");
         F("D.2.B", "after D.2.A", Xyz("r", "Point1"));
         F("D.2.C", "after D.2.B", Xyz("r", "Point2"));
         F("D.2.D", "after D.2.C", Xyz("r", "Point3"));
-        F("D.5", "one per extra ellipsoid (D.1.A NELP)", Cat(["i:EllipID"], Xyz("r", "Ellip Semi"), Xyz("r", "Ellip Center"),
+        F("D.5", "one per extra ellipsoid (D.1.A NELP)", Cat(["e:EllipID"], Xyz("r", "Ellip Semi"), Xyz("r", "Ellip Center"),
           ["r:Ellip Yaw", "r:Ellip Pitch", "r:Ellip Roll"], Xyz("r", "Ellip Power")));
         // ponytail: Type 5 constraints carry a second D.6 line (effective masses, spring, damping, ref length) — not
         // in the corpus, so its layout is unverified; the count check here covers the first line only.
@@ -137,22 +140,22 @@ public static class CardSchema
 
         // F: contact allocation
         V("F.1.A", "always, one value per plane", Per18, UpTo18, 1, "i:MNPL");
-        F("F.1.B", "sum of F.1.A lines", Cat(["p:Plane", "g:Plane Segment", "g:Contact Segment", "i:Contact Ellip"], FiveFuncs, ["i:Edge Test", "i:Output"]));   // solver: ..., NX, NOUT
+        F("F.1.B", "sum of F.1.A lines", Cat(["p:Plane", "g:Plane Segment", "g:Contact Segment", "e:Contact Ellip"], FiveFuncs, ["i:Edge Test", "i:Output"]));   // solver: ..., NX, NOUT
         V("F.3.A", "always, one value per segment", Per18, UpTo18, 1, "i:MNSEG");
-        F("F.3.B", "sum of F.3.A lines", Cat(["g:Segment A", "i:Segment A Ellip", "g:Segment B", "i:Segment B Ellip"], FiveFuncs, ["i:Output"]));
+        F("F.3.B", "sum of F.3.A lines", Cat(["g:Segment A", "e:Segment A Ellip", "g:Segment B", "e:Segment B Ellip"], FiveFuncs, ["i:Output"]));
         V("F.4.A", "always, one value per joint", Per18, UpTo18, 1, "i:IGLOB");
         F("F.4.B", "one per joint with F.4.A IGLOB != 0", "j:Joint", "i:Not Used 1", "i:Not Used 2", "i:Not Used 3",
           "f:F1 (Torq-Def)", "f:F2 (Herron Eq)", "f:F3 (R)", "f:F4 (G)", "f:Friction");
         V("F.7.A", "when D.1.A NWINDF > 0, one value per segment", Per18, UpTo18, 1, "i:MWSEG");
-        F("F.7.B", "one per wind contact", "g:Contact Segment", "i:Contact Ellip", "g:Wind Plane Segment", "p:Wind Plane",
+        F("F.7.B", "one per wind contact", "g:Contact Segment", "e:Contact Ellip", "g:Wind Plane Segment", "p:Wind Plane",
           "f:Wind Function", "f:Drag Coef Function", "i:Blocking");
         V("F.7.C", "after F.7.B when Blocking != 0", "1-18 segment/ellipsoid pairs", t => t.Count is >= 2 and <= 36 && t.Count % 2 == 0, 2,
-          "g:Blocking Segment", "i:Blocking Ellip");
+          "g:Blocking Segment", "e:Blocking Ellip");
         F("F.8.A", "one per harness (D.1.A NHRNSS)", Cat(Seq("i:Belts in Harness #", 5), ["i:Max Iteration", "r:Max Strain Convergence"]));
         // solver src/input_harness.for:107 (NPTSPB); ATB 3I ReadFile reads it only for harnesses with belts.
         V("F.8.B", "one per harness with F.8.A belts > 0, one value per belt", Per18, UpTo18, 1, "i:Points per Belt");
         F("F.8.C", "one per harness belt", "f:Strain F1", "f:Strain F2", "f:Strain F3", "f:Strain F4", "i:Not Used", "r:Initial Slack");
-        F("F.8.D1", "one per belt point", Cat(["g:Ref Point Segment", "i:Ref Point Ellip", "i:Preferred Direction", "r:Delta R"], FiveFuncs, Xyz("r", "Point Loc")));
+        F("F.8.D1", "one per belt point", Cat(["g:Ref Point Segment", "e:Ref Point Ellip", "i:Preferred Direction", "r:Delta R"], FiveFuncs, Xyz("r", "Point Loc")));
         F("F.8.D2", "after F.8.D1", Cat(Xyz("r", "Offset"), Xyz("r", "Direction Vec")));
         F("F.10", "one per actuator (D.1.B NRTORQ)", "j:Joint ID", "g:Base SegID", "f:Target Angle Function",
           "f:Proportional Gain Function", "f:Derivative Gain Function", "f:Integral Gain Function");
@@ -169,10 +172,14 @@ public static class CardSchema
             V($"H.{n}.A", "always; first row of the selection", "7 tokens (first row) or 6 (continuation row)", t => t.Count is 7 or 6, 0, H13);
             V($"H.{n}.B", "continuation rows; a lone 0 or empty row when Count <= 1", "0, 1 or 6 tokens", t => t.Count is 0 or 1 or 6, 0, H13[1..]);
         }
-        foreach (var n in new[] { 4, 5, 6, 8, 9 })
+        foreach (var n in new[] { 4, 5, 6, 8 })
             V($"H.{n}", "always", "1 + 2 x Count tokens", CountPairs, 2, H4_9);
-        V("H.7", "always", "1 + Count tokens", CountList, 1, H7_11);
-        V("H.11", "always", "1 + Count tokens", CountList, 1, H7_11);
+        // H.9's second value is a joint: src/heding_joint_forces.for:51 JRF = MSG(II,9) -> JNT(JRF)%JNT_NAME.
+        V("H.9", "always", "1 + 2 x Count tokens", CountPairs, 2, "i:Count", "g:Ref Segment", "j:Joint");
+        // H.7 lists joints (src/input_h7_cards.for:103 JNT(L)); H.11 is read only when NRTORQ > 0 and lists
+        // actuators (F.10 rows), which are not a renumbered entity, so it stays a plain int.
+        V("H.7", "always", "1 + Count tokens", CountList, 1, "i:Count", "j:Joint");
+        V("H.11", "always", "1 + Count tokens", CountList, 1, "i:Count", "i:Actuator");
         F("H.10.A", "always", "i:MCG");
         V("H.10.B", "one per total body (H.10.A MCG)", "2 + Segments in Body tokens", t => Lead(t, 1) >= 0 && t.Count == 2 + Lead(t, 1), 1,
           "i:Total Body ID", "i:Segment Count", "g:Segments in Body");

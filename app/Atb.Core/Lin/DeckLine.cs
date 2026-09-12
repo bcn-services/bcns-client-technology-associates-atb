@@ -38,6 +38,12 @@ public sealed class DeckLine
     public void Set(int i, string rawToken) { Tokens[i] = rawToken; Raw = null; }
     /// Labeler hook: new label plus the text to write back (null = regenerate from tokens).
     internal void Relabel(string label, string? raw) { Label = label; Raw = raw; }
+    /// Renumber hook: replace every token; the line is regenerated only if a token actually changed.
+    internal void SetTokens(IReadOnlyList<string> toks)
+    {
+        if (toks.SequenceEqual(Tokens)) return;
+        Tokens.Clear(); Tokens.AddRange(toks); Raw = null;
+    }
     public void SetStr(int i, string s) => Set(i, "\"" + s + "\"");
     public void SetNum(int i, double v) => Set(i, FormatNum(v));
     public void SetInt(int i, int v) => Set(i, v.ToString(CultureInfo.InvariantCulture));
