@@ -89,7 +89,7 @@ Context: `README.md` (solver, verification), `docs/TIER2-SCOPE.md` (feature list
     - Output collection is an `Atb.Core` function: given a work dir holding `<base>.aou/.sa1/.t2x` it copies them next to the deck path and removes the work dir, and leaves nothing behind when cancelled mid-run (unit test on temp dirs)
     - The stdin answer sequence for mode 101 (`.lin` run) and mode 102 (`.ain` convert) comes from one `Atb.Core` function, unit-tested against the answers `SolverRun` sends today
     - `dotnet build app/Atb.sln` passes with the progress window, Cancel, and Convert menu item wired to `SolverRun`
-  status: in progress
+  status: done
 
 - task: Animation viewer in `Atb.App/Viewer/AnimationForm.cs` + `Sa1Scene.cs` (WPF `Viewport3D` in an
     `ElementHost`) — segment ellipsoids as scaled unit-sphere meshes under the per-frame transform,
