@@ -1,9 +1,12 @@
 # Build the Tier 2 desktop app (app/Atb.sln) on Windows and publish it as an artifact.
-# Manual trigger only (Windows minutes bill at 2x):
+# Runs on PRs that touch the app, or manually (Windows minutes bill at 2x):
 #   GITHUB_TOKEN= gh workflow run app-build.yml --repo bcn-services/bcns-client-technology-associates-atb
+# (manual dispatch only works once this file is on main)
 name: Desktop app build
 on:
   workflow_dispatch:
+  pull_request:
+    paths: ['app/**', '.github/workflows/app-build.yml']
 
 jobs:
   app:
