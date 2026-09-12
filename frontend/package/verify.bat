@@ -26,7 +26,9 @@ set /a NFAIL=0
 set "SUMMARY="
 for /f "usebackq tokens=1,2,3,4" %%A in ("%HERE%cases\cases.txt") do call :one %%A %%B %%C %%D
 echo.
-echo ===== RESULT: %NID% IDENTICAL, %NDF% DIFFERS, %NFAIL% FAILED TO RUN  (of 12 runs)
+set /a NTOT=NID+NDF+NFAIL
+echo ===== RESULT: %NID% IDENTICAL, %NDF% DIFFERS, %NFAIL% FAILED TO RUN  (of %NTOT% runs)
+if %NDF% NEQ 0 echo DIFFERS can come from this machine's CPU, not from the front end (see README.txt). Send verify-results.txt and the work folder.
 echo %DATE% %TIME% %NID% IDENTICAL %NDF% DIFFERS %NFAIL% FAILED>>"%HERE%verify-results.txt"
 echo Results appended to %HERE%verify-results.txt ; per-case logs under %WORK%
 if %NFAIL% NEQ 0 exit /b 3
@@ -38,6 +40,7 @@ set "KEY=%~1"
 set "CD=%~2"
 set "BASE=%~3"
 set "SUB=%~4"
+if "%SUB%"=="" (echo %KEY%: bad cases.txt line & set /a NFAIL+=1 & goto :eof)
 if not exist "%WORK%\%SUB%" mkdir "%WORK%\%SUB%"
 copy /y "%HERE%cases\%CD%\%BASE%.LIN" "%WORK%\%SUB%\%BASE%.lin" >nul
 echo.

@@ -27,6 +27,18 @@ namespace ATBRunner
         [STAThread]
         static int Main(string[] args)
         {
+            try { return MainInner(args); }
+            catch (Exception ex)
+            {
+                try { Win32.AttachConsole(-1); } catch { }
+                Console.Error.WriteLine("ATBRunner: error: " + ex.Message);
+                if (args.Length == 0) MessageBox.Show(ex.ToString(), "ATB Runner");
+                return 2;
+            }
+        }
+
+        static int MainInner(string[] args)
+        {
             if (args.Length == 0)
             {
                 Application.EnableVisualStyles();

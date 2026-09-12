@@ -39,14 +39,14 @@ RUNNING A CASE (COMMAND LINE / BATCH)
 WORK FOLDER RULE
   The 2005 solver stores its working folder in an 80-character field. Keep the folder
   containing the deck short (under 50 characters, no spaces). If the folder is long,
-  the GUI runs the case in %LOCALAPPDATA%\ATBRun\<deck> and copies the outputs back.
+  the GUI runs the case in C:\Users\Public\ATBRun\<deck> and copies the outputs back.
 
 VERIFYING (verify.bat)
   Double-click verify.bat (or run it from a command prompt). It runs all 12 reference
   cases (about 5-10 minutes) and prints IDENTICAL or DIFFERS for each one, then a
   summary line. Results are also appended to verify-results.txt next to it.
   DIFFERS on a case means a numeric result differs from the reference output that was
-  produced on the original machine; the logs under %LOCALAPPDATA%\ATBRun\verify say which
+  produced on the original machine; the logs under C:\Users\Public\ATBRun\verify say which
   file. Differences can come from the CPU/floating-point hardware, not only from the
   front end, so a DIFFERS result should be sent back with verify-results.txt attached.
 
