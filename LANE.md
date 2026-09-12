@@ -109,7 +109,7 @@ Context: `README.md` (solver, verification), `docs/TIER2-SCOPE.md` (feature list
     - For `example/sledout.sa1` frame 0, the world positions of both belt strands' points come from one `Atb.Core` function and lie within the sled's bounding box (unit test)
     - The playback clock maps wall time × speed to a frame index by binary search, in `Atb.Core`, unit-tested at the first, last, and a mid-file time
     - `dotnet build app/Atb.sln` passes with the segment camera parented under the segment transform
-  status: in progress
+  status: done
 
 - task: ID renumbering — one function in `Atb.Core/Cards/Renumber.cs` that inserts or deletes a
     segment, joint, plane, or vehicle and shifts every reference to it in every other card, using
