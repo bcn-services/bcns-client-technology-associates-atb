@@ -35,6 +35,7 @@ namespace ATBRunner
                 return 0;
             }
             Win32.AttachConsole(-1); // echo to the parent console when run from cmd/verify.bat
+            if (args[0] == "--strip-hash") return StripHash(args);
             var o = new RunOptions(); string exe = null; bool enumOnly = false;
             for (int i = 0; i < args.Length; i++)
             {
@@ -51,6 +52,7 @@ namespace ATBRunner
                     case "--timeout": o.TimeoutSec = int.Parse(v); i++; break;
                     case "--abort-after": o.NoOutputAbortSec = int.Parse(v); i++; break;
                     case "--seed-parms": o.SeedParms = true; break;
+                    case "--handoff-dir": o.HandoffDir = string.Equals(v, "system32", StringComparison.OrdinalIgnoreCase) ? Environment.SystemDirectory : Path.GetFullPath(v); i++; break;
                     case "--keep-parms": o.DeleteParms = false; break;
                     case "--foreground": o.Foreground = true; break;
                     case "--enum": enumOnly = true; break;
@@ -76,13 +78,33 @@ namespace ATBRunner
             }
         }
 
+        // --strip-hash FILE... [--volatile volatile.txt]  -> "<sha256> <dropped>/<total> <file>" per file
+        static int StripHash(string[] args)
+        {
+            string vol = null, outFile = null; var files = new List<string>();
+            for (int i = 1; i < args.Length; i++) { if (args[i] == "--volatile") vol = args[++i]; else if (args[i] == "--outfile") outFile = args[++i]; else files.Add(args[i]); }
+            var pats = Strip.LoadVolatile(vol ?? Path.Combine(ExeDir, "volatile.txt"));
+            int rc = 0; var sb = new System.Text.StringBuilder();
+            foreach (var f in files)
+            {
+                string line;
+                if (!File.Exists(f)) { line = "MISSING - " + f; rc = 1; }
+                else { int t, d; string h = Strip.StrippedHash(f, pats, out t, out d); line = h + " " + d + "/" + t + " " + f; }
+                Console.WriteLine(line); sb.Append(line + "\r\n");
+            }
+            if (outFile != null) File.WriteAllText(outFile, sb.ToString());
+            return rc;
+        }
+
         static string Usage()
         {
             return "ATBRunner " + Version + "\n" +
                    "  ATBRunner.exe                       GUI\n" +
                    "  ATBRunner.exe --lin X.LIN --out NAME --dir D   batch (same code path as GUI)\n" +
-                   "  options: --exe PATH --feed postchar|postkey|postchardeep|sendinput|sendkeys|conin|stdin --log FILE --shots DIR\n" +
-                   "           --timeout S --abort-after S --seed-parms --keep-parms --foreground --enum --answers a|b|c|d|e\n";
+                   "  options: --exe PATH --feed postchar|postkey|postchardeep|sendinput|sendkeys|conin|stdin|handoff --log FILE --shots DIR\n" +
+                   "           --timeout S --abort-after S --seed-parms --keep-parms --foreground --enum --answers a|b|c|d|e\n" +
+                   "           --handoff-dir system32|PATH (feed handoff only)\n" +
+                   "  ATBRunner.exe --strip-hash FILE... [--volatile volatile.txt] [--outfile F]   SHA-256 with volatile lines masked\n";
         }
     }
 }

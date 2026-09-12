@@ -75,7 +75,7 @@ namespace ATBRunner
             string srcDir = Path.GetDirectoryName(linBox.Text); string work = srcDir; bool copied = false;
             if (!Short(srcDir))
             {   // solver keeps its work dir in an 80-char field; use a short scratch dir and copy back
-                work = Path.Combine(Environment.GetEnvironmentVariable("LOCALAPPDATA") ?? Path.GetTempPath(), "ATBRun", inBase.Length > 12 ? inBase.Substring(0, 12) : inBase);
+                work = Path.Combine(SolverRun.ShortWorkRoot(), inBase.Length > 12 ? inBase.Substring(0, 12) : inBase);
                 Directory.CreateDirectory(work); File.Copy(linBox.Text, Path.Combine(work, inBase + ".lin"), true); copied = true;
             }
             var o = new RunOptions { ExePath = Program.DefaultSolver, WorkDir = work, InputBase = inBase, OutputBase = outName, LogPath = Path.Combine(work, outName + ".runner.log") };

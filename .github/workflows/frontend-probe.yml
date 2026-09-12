@@ -33,11 +33,11 @@ jobs:
         shell: cmd
         run: frontend\build.bat
 
-      - name: Probe ladder + case runs
+      - name: Probe (push 1 ran p1_ladder.ps1; from push 2 on, p2_run.ps1 = handoff rung, package rehearsal, case runs)
         shell: pwsh
         run: |
           $w = "$env:RUNNER_TEMP\w"
-          & frontend\probe\p1_ladder.ps1 -Repo "$PWD" -Work $w
+          & frontend\probe\p2_run.ps1 -Repo "$PWD" -Work $w -Pkg "$env:RUNNER_TEMP\package"
           Copy-Item runner-info.txt $w\
           Copy-Item frontend\bin\ATBRunner.exe $w\
 
@@ -47,3 +47,10 @@ jobs:
           name: frontend-probe
           path: ${{ runner.temp }}/w/
           if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ATBRunner-package
+          path: ${{ runner.temp }}/package/
+          if-no-files-found: warn

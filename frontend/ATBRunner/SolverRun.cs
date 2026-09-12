@@ -14,7 +14,7 @@ using System.Threading;
 
 namespace ATBRunner
 {
-    public enum FeedMode { PostChar, PostCharDeep, PostKey, SendInput, SendKeys, ConIn, Stdin, None }
+    public enum FeedMode { PostChar, PostCharDeep, PostKey, SendInput, SendKeys, ConIn, Stdin, None, Handoff }
 
     public class RunOptions
     {
@@ -26,6 +26,7 @@ namespace ATBRunner
         public bool DeleteParms = true, SeedParms = false, EnumOnly = false, Foreground = false;
         public string[] Answers;              // null = standard 5 answers
         public int SettleMs = 1500, LineGapMs = 400;
+        public string HandoffDir;             // Handoff mode only: folder named in C:\ATBFIG.SYS (null = work dir; ATB 3I used System32)
     }
 
     public class RunResult
@@ -50,6 +51,20 @@ namespace ATBRunner
             log.AppendLine(line);
             if (logFile != null) { logFile.WriteLine(line); logFile.Flush(); }
             var h = Status; if (h != null) h(line);
+        }
+
+        // A short, space-free folder the solver can echo into its 80-column directory line. Same order as verify.bat.
+        public static string ShortWorkRoot()
+        {
+            foreach (var c in new[] { Environment.GetEnvironmentVariable("PUBLIC"), Environment.GetEnvironmentVariable("LOCALAPPDATA"), Path.GetTempPath() })
+            {
+                if (string.IsNullOrEmpty(c)) continue;
+                string d = Path.Combine(c, "ATBRun");
+                try { Directory.CreateDirectory(d); File.WriteAllText(Path.Combine(d, ".w"), ""); File.Delete(Path.Combine(d, ".w")); }
+                catch { continue; }
+                if (d.Length <= 40 && !d.Contains(" ")) return d;
+            }
+            return Path.Combine(Path.GetTempPath(), "ATBRun");
         }
 
         public static string Sha256(string path)
@@ -99,6 +114,8 @@ namespace ATBRunner
                 if (o.DeleteParms && File.Exists(parms)) { File.Delete(parms); Log("deleted atb_parms.mem"); }
                 if (o.SeedParms) { File.WriteAllText(parms, o.WorkDir.PadRight(79) + "\r\n"); Log("seeded atb_parms.mem with work dir"); }
 
+                if (o.Mode == FeedMode.Handoff && !Handoff(o, lin, r)) return r;
+
                 var psi = new ProcessStartInfo(o.ExePath);
                 psi.WorkingDirectory = o.WorkDir; psi.UseShellExecute = false; psi.RedirectStandardInput = (o.Mode == FeedMode.Stdin);
                 p = Process.Start(psi);
@@ -136,7 +153,7 @@ namespace ATBRunner
                     Shot(o, "02-enum"); Kill(p); r.Error = "enum-only"; return r;
                 }
 
-                if (!p.HasExited && o.Mode != FeedMode.Stdin && o.Mode != FeedMode.None) Feed(o, p, frame, answers, r);
+                if (!p.HasExited && o.Mode != FeedMode.Stdin && o.Mode != FeedMode.None && o.Mode != FeedMode.Handoff) Feed(o, p, frame, answers, r);
                 double fedAt = sw.Elapsed.TotalSeconds;
                 Log("fed; monitoring");
 
@@ -145,7 +162,7 @@ namespace ATBRunner
                 {
                     if (p.WaitForExit(250)) break;
                     double now = sw.Elapsed.TotalSeconds;
-                    if (!aouSeen && File.Exists(aou)) { aouSeen = true; r.SecToAou = now; Log(".aou appeared: input accepted"); Shot(o, "03-running"); }
+                    if (!aouSeen && (File.Exists(aou) || (o.Mode == FeedMode.Handoff && File.Exists(Path.Combine(o.HandoffDir ?? o.WorkDir, o.OutputBase + ".aou"))))) { aouSeen = true; r.SecToAou = now; Log(".aou appeared: input accepted"); Shot(o, "03-running"); }
                     if (aouSeen && now - lastProgress > 5) { lastProgress = now; var fi = new FileInfo(aou); Log("progress: .aou " + fi.Length + " bytes"); }
                     var dlg = Win32.TopWindowsOf(p.Id).FirstOrDefault(w => w.Visible && w.Class == "#32770");
                     if (dlg != null)
@@ -165,6 +182,7 @@ namespace ATBRunner
                 r.SecToExit = sw.Elapsed.TotalSeconds;
                 try { r.ExitCode = p.ExitCode; } catch { }
                 Log("process exited code=" + r.ExitCode + " after " + r.SecToExit.ToString("F1") + " s; dialogs dismissed=" + r.DialogsDismissed);
+                if (o.Mode == FeedMode.Handoff) SweepHandoffOutputs(o);
                 r.Outputs = OutputsOf(o.WorkDir, o.OutputBase);
                 foreach (var f in r.Outputs) Log("output " + Path.GetFileName(f) + " " + new FileInfo(f).Length + " B sha256=" + Sha256(f));
                 bool t21 = r.Outputs.Any(f => f.EndsWith(".t21", StringComparison.OrdinalIgnoreCase) && new FileInfo(f).Length > 0);
@@ -174,6 +192,43 @@ namespace ATBRunner
             catch (Exception ex) { r.Error = ex.GetType().Name + ": " + ex.Message; Log("EXCEPTION " + ex); if (p != null) Kill(p); }
             finally { r.ElapsedSec = sw.Elapsed.TotalSeconds; if (logFile != null) { logFile.Close(); logFile = null; } }
             return r;
+        }
+
+        // Rung 1: exactly what ATB 3I (VB.NET, 2005) does before Process.Start(ATBV3.exe): the ATB3I build of
+        // the solver reads C:\ATBFIG.SYS (written by the installer: length + path of the handoff folder,
+        // length + path of a temp folder), then <handoff>\winintm.sys (the input deck) and
+        // <handoff>\execatb.dat ("101" = .LIN run, then the output base name). No prompts.
+        bool Handoff(RunOptions o, string lin, RunResult r)
+        {
+            string fig = @"C:\ATBFIG.SYS";
+            string dir = (o.HandoffDir ?? o.WorkDir).TrimEnd('\\') + "\\";
+            string tmp = Path.Combine(Environment.GetEnvironmentVariable("windir") ?? @"C:\Windows", "Temp") + "\\";
+            string content = " " + dir.Length + " \r\n" + dir + "\r\n " + tmp.Length + " \r\n" + tmp + "\r\n";
+            try { File.WriteAllText(fig, content); Log("handoff: wrote " + fig + " = " + content.Replace("\r\n", "|")); }
+            catch (Exception ex) { r.Error = "cannot write " + fig + " (the ATB 3I installer wrote it as admin): " + ex.Message; Log(r.Error); return false; }
+            File.Copy(lin, Path.Combine(dir, "winintm.sys"), true);
+            File.WriteAllText(Path.Combine(dir, "execatb.dat"), "101\r\n" + o.OutputBase + "\r\n");
+            Log("handoff: wrote winintm.sys (copy of " + Path.GetFileName(lin) + ") and execatb.dat [101|" + o.OutputBase + "] in " + dir);
+            Thread.Sleep(500);
+            return true;
+        }
+
+        void SweepHandoffOutputs(RunOptions o)
+        {
+            var dirs = new List<string> { o.HandoffDir ?? o.WorkDir, Path.GetDirectoryName(o.ExePath), Path.Combine(Environment.GetEnvironmentVariable("windir") ?? @"C:\Windows", "Temp"), @"C:\", Environment.SystemDirectory, Environment.CurrentDirectory };
+            foreach (var d in dirs.Distinct())
+            {
+                if (string.Equals(d.TrimEnd('\\'), o.WorkDir.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)) continue;
+                try
+                {
+                    foreach (var f in OutputsOf(d, o.OutputBase))
+                    {
+                        string dest = Path.Combine(o.WorkDir, Path.GetFileName(f));
+                        Log("handoff: output found outside work dir: " + f + " -> copied to work dir"); File.Copy(f, dest, true); File.Delete(f);
+                    }
+                }
+                catch (Exception ex) { Log("handoff sweep " + d + ": " + ex.Message); }
+            }
         }
 
         void Feed(RunOptions o, Process p, IntPtr frame, string[] answers, RunResult r)

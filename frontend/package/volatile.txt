@@ -1,0 +1,33 @@
+# Lines masked (replaced by <VOLATILE>) before an output file is hashed. One .NET regex per line.
+# Every other byte of every output file must match for a case to print IDENTICAL.
+#
+# A. Lines that differ between two runs of the SAME input on the SAME machine (derived from data:
+#    two runs of each of the 12 reference cases differed ONLY in these .aou lines; every other
+#    output file was byte-identical). These carry the date, time, CPU seconds or the work folder.
+# A1. the working-directory echo under "The various files used for this run are in the directory:"
+^ {11}(\.\s*$|[A-Za-z]:\\)
+# A2. CPU-time page header
+^1 Elapsed CPU Time =
+# A3. subroutine timing table rows: "   NAME   calls   seconds   percent"
+^   [A-Z][A-Z0-9]{1,7} +[0-9]+ +[0-9]+\.[0-9]{2} +[0-9]+\.[0-9]{2}\s*$
+# A4. timing table total
+^0Total +[0-9]+\.[0-9]{2} +100\.00
+# A5-A7. wall-clock stamps
+^ The run started at: 
+^ The run ended at:   
+^  Elapsed CPU time: 
+#
+# B. Lines that only echo the file NAMES chosen for the run. The reference outputs were named
+#    <case>.* and the runner writes <case>_new.*, so these four footer lines always differ by
+#    the "_new" suffix (the reference "input file name" line is 32 NUL bytes: ATB 3I passed the
+#    deck as winintm.sys, not by name). They contain no simulation results.
+^ The input file name for this run is: 
+^ The standard output is in file: 
+^ Output data for VIEW are in structured file: 
+^ Tabular time history data have the file name: 
+#
+# C. One constant build-text difference. The reference outputs came from the ATB 3I copy of
+#    ATBV3.exe (the "Errors in running ATB" build); the shipped ATBV3.exe (client's ATBv3-1
+#    folder) prints this banner sentence with a period, the ATB 3I copy without one. Only the
+#    ". " differs; the two lines are otherwise byte-identical, no numbers involved.
+^ {31}terms by executing the following analysis\.? \s*$
