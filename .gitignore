@@ -16,3 +16,5 @@ src/atb-*
 # .NET build output (app/)
 **/bin/
 **/obj/
+.claude/dev-team/*-report.md
+!.claude/dev-team/team-memory.md

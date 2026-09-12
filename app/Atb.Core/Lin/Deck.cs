@@ -83,4 +83,23 @@ public sealed class Deck
     public string Title => Card("A.1.b")?.Str(0) ?? "";
     public int SegmentCount => Card("B.1")?.Int(0) ?? 0;
     public int JointCount => Card("B.1")?.Int(1) ?? 0;
+
+    /// Every labelled line checked against CardSchema: unknown labels and token counts that do
+    /// not fit. Unlabelled lines (E.4 data, C.3 decelerations, ...) are skipped. Line is 1-based.
+    // ponytail: per-line checks only — cross-card counts (e.g. D.7 total == B.1 Segments) are not checked.
+    public List<DeckIssue> Validate()
+    {
+        var issues = new List<DeckIssue>();
+        for (int i = 0; i < Lines.Count; i++)
+        {
+            var l = Lines[i];
+            if (l.Card.Length == 0) continue;
+            var reason = global::Atb.Core.Cards.CardSchema.Cards.TryGetValue(l.Card, out var spec)
+                ? spec.Check(l.Tokens) : "no schema entry for this card";
+            if (reason != null) issues.Add(new DeckIssue(i + 1, l.Card, reason));
+        }
+        return issues;
+    }
 }
+
+public sealed record DeckIssue(int Line, string Label, string Reason);
