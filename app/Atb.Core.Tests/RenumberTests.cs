@@ -277,8 +277,8 @@ public class RenumberTests
         Assert.Equal("3 0 4 3 3 4 4 3 3 2 2 1 2 3 1 1", Toks(deck.Card("F.3.A")!));
         Assert.Equal(39, deck.Cards("F.3.B").Count());
         Assert.Equal(["0 -15 0 0 0 0 0 0 0 0", "0 -15 0 0 0 0 0 0 0 3"], deck.Cards("G.3.A").Skip(2).Take(2).Select(Toks));
-        Assert.Equal("2 18 0 0 0 0 0", Toks(deck.Card("H.2.A")!));
-        Assert.Equal("18 4 0 0 0 0", Toks(deck.Card("H.2.B")!));
+        Assert.Equal("1 18 4 0 0 0 0", Toks(deck.Card("H.2.A")!));   // row (19,3) dropped, count 2 -> 1, row (19,5) -> (18,4) moves up
+        Assert.Equal("0", Toks(deck.Card("H.2.B")!));                // Count <= 1: lone dummy .b line
         Assert.Empty(deck.Validate());
     }
 
@@ -325,5 +325,52 @@ public class RenumberTests
 
         Assert.NotNull(Renumber.Delete(deck, Entity.Plane, 1, _ => throw new Exception("nothing refers to plane 1")));
         AssertSameBytesAsFixture(deck);
+    }
+
+    // --- H.1-H.8 Segment/Joint fields are read as SEG(ABS(MSG)) (src/heding_hcards.for:103); the sign is an output option.
+    const string H2a = "2    19    3    0    0    0    0    Card H.2.a", H2b = "    19    5    0    0    0    0    Card H.2.b";
+    static Deck Deck2479With(params (string From, string To)[] edits)
+    {
+        var text = File.ReadAllText(Deck2479, Encoding.Latin1);
+        string nl = text.Contains("\r\n") ? "\r\n" : "\n";
+        foreach (var (from, to) in edits) { Assert.Contains(from, text); text = text.Replace(from, to.Replace("\n", nl)); }
+        return Deck.Parse(text);
+    }
+
+    [Fact]
+    public void InsertSegment_ShiftsNegativeH2Segment_KeepingItsSign()
+    {
+        var deck = Deck2479With((H2b, "    19    -5    0    0    0    0    Card H.2.b"));
+        Renumber.Insert(deck, Entity.Segment, 3, Renumber.Copy(deck, Entity.Segment, 3));
+        Assert.Equal("20 -6 0 0 0 0", Toks(deck.Card("H.2.B")!));
+    }
+
+    [Fact]
+    public void DeleteSegment_NegativeH2RefToIt_IsInTheConfirmList()
+    {
+        var deck = Deck2479With((H2a, "2    19    -3    0    0    0    0    Card H.2.a"));
+        IReadOnlyList<RefSite>? seen = null;
+        Assert.Null(Renumber.Delete(deck, Entity.Segment, 3, r => { seen = r; return false; }));
+        Assert.Contains(new RefSite(319, "Card H.2.a", "Segment"), seen!);
+    }
+
+    [Fact]
+    public void DeleteSegment_H4NegativeRefs_DropTheHitPairAndShiftTheRest()
+    {
+        var deck = Deck2479With(("0    Card H.4", "2    0    -3    0    -5    Card H.4"));
+        Assert.NotNull(Renumber.Delete(deck, Entity.Segment, 3, _ => true));
+        Assert.Equal("1 0 -4", Toks(deck.Card("H.4")!));
+    }
+
+    [Fact]
+    public void DeleteSegment_H2MiddleRowNegative_IsDroppedAndLaterRowsMoveUp()
+    {
+        var deck = Deck2479With((H2a, "3    19    1    0    0    0    0    Card H.2.a"),
+                                (H2b, "    19    -3    0    0    0    0    Card H.2.b\n    19    5    0    0    0    0    Card H.2.b"));
+        Assert.Empty(deck.Validate());
+        Assert.NotNull(Renumber.Delete(deck, Entity.Segment, 3, _ => true));
+        Assert.Equal(["2 18 1 0 0 0 0", "18 4 0 0 0 0", "0 0 0 0 0 0 0", "0"],
+                     deck.Lines.SkipWhile(l => !l.Is("H.2.A")).Take(4).Select(Toks));   // H.2.a, one H.2.b, then H.3's lines
+        Assert.Empty(deck.Validate());
     }
 }

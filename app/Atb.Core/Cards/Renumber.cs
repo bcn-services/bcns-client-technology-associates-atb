@@ -64,7 +64,7 @@ public static class Renumber
     };
 
     /// Output lists whose entries are removed (and the leading count dropped) instead of cleared: key = index of the count.
-    // ponytail: ATB 3I leaves H cards alone on delete; H.1-H.3 multi-row selections are only cleared to 0 — reflow them if needed.
+    /// H.1-H.3 rows span lines and are reflowed by DropH13Rows instead.
     static readonly Dictionary<string, int> CountLed = new(StringComparer.OrdinalIgnoreCase)
     { ["H.4"] = 0, ["H.5"] = 0, ["H.6"] = 0, ["H.7"] = 0, ["H.8"] = 0, ["H.9"] = 0, ["H.10.B"] = 1 };
 
@@ -85,7 +85,7 @@ public static class Renumber
             var l = d.Lines[li];
             if (own.Contains(l)) continue;
             foreach (var i in Marked(l, Kinds(e)))
-                if (Num(l.Tokens[i]) == num) sites.Add(new(li + 1, l.Label, CardSchema.Header(l.Card, i + CardSchema.Skip(l.Card, l.Count))));
+                if (Ref(l, i, l.Tokens[i]) == num) sites.Add(new(li + 1, l.Label, CardSchema.Header(l.Card, i + CardSchema.Skip(l.Card, l.Count))));
         }
         return sites;
     }
@@ -123,7 +123,7 @@ public static class Renumber
         for (int li = 0; li < d.Lines.Count; li++)
         {
             var l = d.Lines[li];
-            if (gone.Contains(l) || !cascade.TryGetValue(l.Card, out var cnt) || !Marked(l, kinds).Any(i => Num(l.Tokens[i]) == num)) continue;
+            if (gone.Contains(l) || !cascade.TryGetValue(l.Card, out var cnt) || !Marked(l, kinds).Any(i => Ref(l, i, l.Tokens[i]) == num)) continue;
             gone.Add(l);
             // ponytail: a Type 5 constraint's unlabelled second D.6 line goes with it — layout unverified (no corpus deck).
             if (l.Is("D.6") && Num(l.Tokens[0]) == 5 && li + 1 < d.Lines.Count && d.Lines[li + 1].Card.Length == 0) gone.Add(d.Lines[li + 1]);
@@ -139,15 +139,17 @@ public static class Renumber
         foreach (var (c, v) in lists) WriteList(d, c, v);
 
         var drop = new HashSet<DeckLine>();
+        if (e != Entity.Joint && e != Entity.Plane) DropH13Rows(d, num, drop);
         for (int li = 0; li < d.Lines.Count; li++)
         {
             var l = d.Lines[li];
+            if (drop.Contains(l)) continue;
             var idx = Marked(l, kinds).ToList();
             if (idx.Count == 0) continue;
             var t = l.Tokens.ToList();
             var hit = new List<int>();
             foreach (var i in idx)
-                if (Num(t[i]) is int v) { if (v == num) hit.Add(i); else if (v > num) t[i] = Str(v - 1); }
+                if (Num(t[i]) is int v && Ref(l, i, t[i]) is int a) { if (a == num) hit.Add(i); else if (a > num) t[i] = Str(Math.Sign(v) * (a - 1)); }
             if (hit.Count > 0 && CountLed.TryGetValue(l.Card, out int lead))
             {
                 var spec = CardSchema.Cards[l.Card];
@@ -183,7 +185,7 @@ public static class Renumber
         {
             var t = l.Tokens.ToList();
             foreach (var i in Marked(l, kinds))
-                if (Num(t[i]) is int v && v >= num) t[i] = Str(v + 1);
+                if (Num(t[i]) is int v && Ref(l, i, t[i]) is int a && a >= num) t[i] = Str(Math.Sign(v) * (a + 1));
             l.SetTokens(t);
         }
         var groups = Groups(e);
@@ -241,6 +243,42 @@ public static class Renumber
     static int? Num(string tok) =>
         double.TryParse(tok.Replace('D', 'E').Replace('d', 'e'), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) && v == Math.Floor(v) && Math.Abs(v) < int.MaxValue
             ? (int)v : null;
+
+    // The solver reads these "Segment"/"Joint" fields as SEG(ABS(MSG)) / JNT(ABS(MSG)); the sign picks an output option
+    // (src/heding_hcards.for:103, output_hcards.for:72, heding_ang_displ.for:82, heding_wind.for:72, heding_jnt_parm.for:72).
+    // Ref Segment (KREF) gets no ABS and must be >= 0 (input_h4_h9_cards.for:113); H.9's joint has no ABS (heding_joint_forces.for:51).
+    static readonly HashSet<string> SignedCards = new(StringComparer.OrdinalIgnoreCase)
+    { "H.1.A", "H.1.B", "H.2.A", "H.2.B", "H.3.A", "H.3.B", "H.4", "H.5", "H.6", "H.7", "H.8" };
+
+    /// The entity number token i refers to: |value| in a sign-carrying H field, else the value.
+    static int? Ref(DeckLine l, int i, string tok) =>
+        Num(tok) is int v && SignedCards.Contains(l.Card) && !CardSchema.Header(l.Card, i + CardSchema.Skip(l.Card, l.Count)).StartsWith("Ref ")
+            ? Math.Abs(v) : Num(tok);
+
+    /// H.1-H.3: drop every selection row whose Segment (|MSG|) or Ref Segment is num, as CountLed does for H.4-H.9, so no
+    /// row is left pointing at SEG(0) or silently at the vehicle frame (heding_hcards.for:103-105). Layout per
+    /// src/input_h1_h3_cards.for: the .a line is Count + row 1; Count <= 1 is followed by one dummy .b line, else one .b per further row.
+    /// The .b lines are the ones right after the .a line (a deck's labels can be off: 2479_2.LIN's H.3.a says H.1.a).
+    static void DropH13Rows(Deck d, int num, HashSet<DeckLine> drop)
+    {
+        static bool IsB(DeckLine l) => l.Card is "H.1.B" or "H.2.B" or "H.3.B";
+        for (int li = 0; li < d.Lines.Count; li++)
+        {
+            var a = d.Lines[li];
+            // ponytail: a 6-token .a line (no Count) is not reflowed and falls back to clearing the ref — no deck has one.
+            if (a.Card is not ("H.1.A" or "H.2.A" or "H.3.A") || a.Count != 7) continue;
+            var bs = new List<DeckLine>();
+            for (int k = li + 1; k < d.Lines.Count && IsB(d.Lines[k]); k++) bs.Add(d.Lines[k]);
+            var rows = new List<List<string>> { a.Tokens.GetRange(1, 6) };
+            rows.AddRange(bs.Where(b => b.Count == 6).Select(b => b.Tokens.ToList()));
+            var keep = rows.Where(r => Num(r[0]) != num && (Num(r[1]) is not int s || Math.Abs(s) != num)).ToList();
+            if (keep.Count == rows.Count) continue;
+            a.SetTokens([Str(keep.Count), .. keep.Count > 0 ? keep[0] : Enumerable.Repeat("0", 6)]);
+            List<List<string>> bLines = keep.Count <= 1 ? [["0"]] : keep.Skip(1).ToList();
+            for (int k = 0; k < bs.Count; k++)
+                if (k < bLines.Count) bs[k].SetTokens(bLines[k]); else drop.Add(bs[k]);
+        }
+    }
 
     static string Str(int v) => v.ToString(CultureInfo.InvariantCulture);
 

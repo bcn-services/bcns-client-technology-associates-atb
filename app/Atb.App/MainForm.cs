@@ -206,7 +206,7 @@ public sealed class MainForm : Form
             {
                 int n = i + 1;
                 try { if (Renumber.Delete(deck, e, n, refs => ConfirmDelete(e, n, refs)) != null) done++; }
-                catch (InvalidOperationException ex) { status.Text = ex.Message; }
+                catch (Exception ex) when (ex is InvalidOperationException or ArgumentOutOfRangeException) { status.Text = ex.Message; }
             }
             if (done == 0) return;
             dirty = true; ShowScreen(screen);
