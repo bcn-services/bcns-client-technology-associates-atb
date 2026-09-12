@@ -70,9 +70,8 @@ public sealed class Sa1Scene
         {
             int att = c.Id1 >= 1 && c.Id1 <= n ? c.Id1 : c.Id0;     // 1-based, as ATB 3I reads them
             if (att < 1 || att > n) continue;
-            var g = new GeometryModel3D(sphere, Solid(Color.FromRgb(230, 120, 120)));
-            // ponytail: yaw/pitch/roll applied as Rz·Ry·Rx and the superquadric power ignored; verify against
-            // ATB 3I when a client deck uses a rotated or non-ellipsoid contact surface.
+            var g = new GeometryModel3D(Sphere(c.Power), Solid(Color.FromRgb(230, 120, 120)));
+            // Same as ATB 3I UISub.MakeCntacElipXFrm: roll about x, then pitch about y, then yaw about z, then offset (degrees).
             g.Transform = new Transform3DGroup
             {
                 Children =
@@ -201,8 +200,14 @@ public sealed class Sa1Scene
     static DiffuseMaterial Solid(Color c) => new(new SolidColorBrush(c));
     static Matrix3D M3D(Mat m) => new(m.M11, m.M12, m.M13, m.M14, m.M21, m.M22, m.M23, m.M24, m.M31, m.M32, m.M33, m.M34, m.M41, m.M42, m.M43, m.M44);
 
-    static MeshGeometry3D Sphere(int slices = 24, int stacks = 12)
+    /// Unit superquadric, as ATB 3I UISub.MakeHyperElip: p_i = sign(u_i)·|u_i|^(2/n_i) with u on the unit sphere;
+    /// power (2,2,2) is the plain sphere. A zero y/z power falls back to the x power, as the original does.
+    static MeshGeometry3D Sphere(Vec? power = null, int slices = 24, int stacks = 12)
     {
+        var n = power ?? new Vec(2, 2, 2);
+        if (n.Y == 0) n.Y = n.X; if (n.Z == 0) n.Z = n.X;
+        if (n.X <= 0) n = new Vec(2, 2, 2);
+        static double Sq(double u, double e) => Math.Sign(u) * Math.Pow(Math.Abs(u), 2 / e);
         var m = new MeshGeometry3D();
         for (int i = 0; i <= stacks; i++)
         {
@@ -211,7 +216,7 @@ public sealed class Sa1Scene
             {
                 double th = 2 * Math.PI * j / slices;
                 var nrm = new Vector3D(r * Math.Cos(th), y, r * Math.Sin(th));
-                m.Positions.Add(new Point3D(nrm.X, nrm.Y, nrm.Z)); m.Normals.Add(nrm);
+                m.Positions.Add(new Point3D(Sq(nrm.X, n.X), Sq(nrm.Y, n.Y), Sq(nrm.Z, n.Z))); m.Normals.Add(nrm);
             }
         }
         for (int i = 0; i < stacks; i++)

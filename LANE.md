@@ -21,6 +21,10 @@ Global rules:
 - Never change the solver (`src/`), `verify/`, or the reference outputs under `cases/`
 - Unedited deck lines are written back from their original text; only edited lines are reformatted
 - Run the tests with `PATH="$HOME/atb-work/dotnet:$PATH" dotnet test app/Atb.sln`
+- Agents run on macOS and cannot launch the Windows app. Every `done when:` is a compile check or an
+  `Atb.Core.Tests` unit test; a `Human check:` line under a task is Nate's by-eye pass on the CI artifact
+  and is not gated by QA. Copy ATB 3I's behaviour from the decompile at `~/atb-work/p0/decomp/` rather
+  than redesigning it
 
 Context: `README.md` (solver, verification), `docs/TIER2-SCOPE.md` (feature list, risks),
 `frontend/ATBRunner/` (QA runner the solver-run code came from).
@@ -61,42 +65,50 @@ Context: `README.md` (solver, verification), `docs/TIER2-SCOPE.md` (feature list
     column headers and cell types from the schema, add/delete/copy/paste rows, numeric validation
     with revert, and a card list on the left of the main window that opens each screen from the
     scope table's menu names.
+    Human check: every scope-table screen opens on the 12 client decks; an Excel paste lands as rows.
   guardrails:
     - Editing a cell rewrites only that deck line; the `Deck` stays the single document
     - Reference columns (segment, joint, plane, function) show the referenced name next to the number but store the number
   done when:
-    - Opening `cases/2479/2479_2.LIN`, choosing Segment Definition, changing segment 1's weight, and saving produces a file that differs from the original in exactly that token
-    - Every screen in the scope table's grid rows opens without error on all 12 client decks
-    - Pasting rows copied from Excel (tab-separated) inserts them as deck lines with the right label
+    - Setting segment 1's weight through the `Deck` edit API on `cases/2479/2479_2.LIN` and saving differs from the original in exactly that token (unit test)
+    - A `Atb.Core` function turns tab-separated paste text into deck lines carrying the given label, rejecting rows whose token count disagrees with the schema (unit test)
+    - Every distinct card label across the 12 client decks and the vendor fixtures has a schema header for each column (unit test)
+    - `dotnet build app/Atb.sln` passes with add/delete/copy/paste row actions wired in `MainForm`
   status: in progress
 
 - task: Run action — File > Run uses `Atb.App/Solver/SolverRun.cs` in a per-run temp directory
     under a short path, streams solver stdout to a progress window, supports cancel, copies the
     outputs next to the deck, and offers to open the `.sa1` in the viewer when done. Convert
     `.ain` → `.lin` (solver mode 102) goes through the same code path.
+    Human check: Run on `cases/2479/2479_2.LIN` yields outputs `verify/cmp.py` accepts; Cancel kills the
+    solver within 2 s; Convert on `example/Sled.ain` opens in the grid.
   guardrails:
     - Never write into `System32` or the app's install directory; scratch files live in the temp dir and are removed after the outputs are copied
     - The UI thread never blocks on the solver
   done when:
-    - Running `cases/2479/2479_2.LIN` from the app yields `.aou`, `.sa1`, `.t2x` next to the deck that `verify/cmp.py` accepts
-    - Cancel during a run kills the solver process within 2 s and leaves no files behind in the temp dir
-    - Convert on `example/Sled.ain` writes a `.lin` the app can open and validate
+    - Output collection is an `Atb.Core` function: given a work dir holding `<base>.aou/.sa1/.t2x` it copies them next to the deck path and removes the work dir, and leaves nothing behind when cancelled mid-run (unit test on temp dirs)
+    - The stdin answer sequence for mode 101 (`.lin` run) and mode 102 (`.ain` convert) comes from one `Atb.Core` function, unit-tested against the answers `SolverRun` sends today
+    - `dotnet build app/Atb.sln` passes with the progress window, Cancel, and Convert menu item wired to `SolverRun`
   status: in progress
 
 - task: Animation viewer in `Atb.App/Viewer/AnimationForm.cs` + `Sa1Scene.cs` (WPF `Viewport3D` in an
     `ElementHost`) — segment ellipsoids as scaled unit-sphere meshes under the per-frame transform,
-    contact ellipsoids (with superquadric power ≠ 1 approximated as ellipsoids, noted on screen),
+    contact ellipsoids as superquadrics with ATB 3I's `MakeHyperElip` vertex formula and `MakeCntacElipXFrm`
+    rotation order (both already copied into `Sa1Scene`),
     planes as two-sided quads, belts as polylines from the per-frame belt tables, play/pause/step/
     speed controls, per-object visibility and colour (defaults from ATB 3I's `ColorMap`),
-    view-all camera and a segment-mounted camera with the same look-at semantics as ATB 3I.
+    view-all camera and a segment-mounted camera with the same look-at semantics as ATB 3I (the camera
+    rides under the segment's transform, so it turns with the segment, as `Animation.cs` does).
+    Human check: every `.sa1` plays start to end; sled belts are drawn on frame 0; toggling a segment
+    off and on restores its colour; the segment camera stays centred and turns with the segment.
   guardrails:
     - Frame data comes only from `Atb.Core.Sa1`; no re-parsing in the UI
     - Solver axes map to screen the same way as ATB 3I (Z up on screen)
   done when:
-    - Every `cases/**/*.sa1` and `example/sledout.sa1` loads and plays start to end at the file's own time steps
-    - For `example/sledout.sa1` the two belt strands are drawn on frame 0 and move with the body
-    - Toggling a segment off removes it from the scene and toggling on restores it with its colour
-    - Selecting a camera segment keeps that segment centred through the whole animation
+    - Every `cases/**/*.sa1` and `example/sledout.sa1` loads with strictly increasing frame times and one transform per segment per frame (unit test)
+    - For `example/sledout.sa1` frame 0, the world positions of both belt strands' points come from one `Atb.Core` function and lie within the sled's bounding box (unit test)
+    - The playback clock maps wall time × speed to a frame index by binary search, in `Atb.Core`, unit-tested at the first, last, and a mid-file time
+    - `dotnet build app/Atb.sln` passes with the segment camera parented under the segment transform
   status: in progress
 
 - task: ID renumbering — one function in `Atb.Core/Cards/Renumber.cs` that inserts or deletes a
@@ -110,6 +122,25 @@ Context: `README.md` (solver, verification), `docs/TIER2-SCOPE.md` (feature list
     - Deleting the last joint then re-adding it reproduces the original deck byte-for-byte
     - Existing passing tests remain passing
   caution: true
+  status: not started
+
+- task: GEBOD body generator, copying ATB 3I's `GEBOD.cs` screen — the form's fields (subject
+    description, subject type, percentile or measured values, unit choices) become the typed answers
+    the 2000-era console program `Gebodv.exe` expects on stdin (prompts: `PLEASE ENTER A DESCRIPTION OF
+    THE SUBJECT`, `ENTER NUMBER CORRESPONDING TO DESIRED SUBJECT TYPE`, `ENTER DESIRED PERCENTILE FOR`,
+    `ENTER VALUE FOR`, `SELECT UNITS FOR`, `ENTER THE NUMBER CORRESPONDING TO THE DESIRED`, optional
+    `FULL PATH NAME OF THE FILE ... UNIT 1`). Run it through `SolverRun` in stdin mode in a temp dir
+    with `GEBOD.DAT` beside it, then feed the resulting `GEBOD.ain` through the existing Convert path
+    and open the `.lin` in the grid. Copy `Gebodv.exe` and `GEBOD.DAT` from
+    `~/atb/ATB_INSTALL/ATB_OLD/ATB 1.3/ATB Update/1300 patch/NewFiles/` into `frontend/bin/`.
+    Human check: generating a 50th-percentile adult male on Windows yields a deck that opens and runs.
+  guardrails:
+    - `Gebodv.exe` is never modified; the app only answers its prompts
+    - The GEBOD form asks exactly what ATB 3I's `GEBOD.cs` asks, in the same order, with the same defaults
+  done when:
+    - An `Atb.Core` function turns a GEBOD request record into the ordered stdin answer lines, and the prompt→answer mapping is unit-tested for the percentile path and the measured-values path
+    - `frontend/bin/Gebodv.exe` and `frontend/bin/GEBOD.DAT` are in the repo and the publish step copies them beside `ATB.exe`
+    - `dotnet build app/Atb.sln` passes with a Tools > GEBOD menu item opening the form
   status: not started
 
 > **⚠️ AUTONOMOUS RUN — STOP HERE**
@@ -153,7 +184,6 @@ Context: `README.md` (solver, verification), `docs/TIER2-SCOPE.md` (feature list
 
 ## Not yet specified
 
-- GEBOD: whether shelling the 2000-era `Gebodv.exe` is acceptable to the client, or whether GEBOD becomes "import a GEBOD-generated deck" — revisit after the client answers how often GEBOD is used
 - Weight Balancing: the positional `balance.pos`/`balance.res` formats need a captured sample from the XP VM before an item can be written — revisit after the Run action item
 
 ## Out of scope
