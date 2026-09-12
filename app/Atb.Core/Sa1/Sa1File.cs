@@ -61,6 +61,31 @@ public sealed class Sa1File
 
     public static Sa1File Load(string path) => Parse(File.ReadAllText(path, Encoding.Latin1));
 
+    /// World (solver-axis) points of each belt strand at frame `i`, in draw order. As ATB 3I FileManager
+    /// (DynBCord) + Animation.ShowBelt: point k = its segment IBAR[0,k]'s transform applied to BAR[3..5]+BAR[6..8];
+    /// strand b takes the next NPtPLY[b] entries of NL[0,*]. Empty when the file has no harness.
+    public Vector3[][] BeltStrands(int i)
+    {
+        var f = Frames[i];
+        if (Harness is not { } h || f.Bar == null || f.Nl == null || f.NPtPly == null) return Array.Empty<Vector3[]>();
+        var strands = new Vector3[h.Belts][];
+        int np = 0;
+        for (int b = 0; b < h.Belts; b++)
+        {
+            var pts = new List<Vector3>();
+            for (int j = 0; j < f.NPtPly[b] && np < f.Nl.Length / 2; j++, np++)
+            {
+                int k = f.Nl[2 * np] - 1;
+                if (k < 0 || k >= h.Points) continue;
+                var local = new Vector3((float)(f.Bar[9 * k + 3] + f.Bar[9 * k + 6]), (float)(f.Bar[9 * k + 4] + f.Bar[9 * k + 7]), (float)(f.Bar[9 * k + 5] + f.Bar[9 * k + 8]));
+                int seg = h.Ibar[2 * k] - 1;
+                pts.Add(seg >= 0 && seg < NGnd ? Vector3.Transform(local, f.Transform(seg)) : local);
+            }
+            strands[b] = pts.ToArray();
+        }
+        return strands;
+    }
+
     public static Sa1File Parse(string text)
     {
         var f = new Sa1File();
