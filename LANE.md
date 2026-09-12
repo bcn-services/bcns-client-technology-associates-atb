@@ -74,7 +74,7 @@ Context: `README.md` (solver, verification), `docs/TIER2-SCOPE.md` (feature list
     - A `Atb.Core` function turns tab-separated paste text into deck lines carrying the given label, rejecting rows whose token count disagrees with the schema (unit test)
     - Every distinct card label across the 12 client decks and the vendor fixtures has a schema header for each column (unit test)
     - `dotnet build app/Atb.sln` passes with add/delete/copy/paste row actions wired in `MainForm`
-  status: in progress
+  status: done
 
 - task: Run action — File > Run uses `Atb.App/Solver/SolverRun.cs` in a per-run temp directory
     under a short path, streams solver stdout to a progress window, supports cancel, copies the
