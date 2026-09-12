@@ -7,3 +7,5 @@
 cases/** -text
 src/**   -text
 example/** -text
+# Client solver binaries and the runner: never convert.
+*.exe binary
