@@ -45,7 +45,7 @@ Context: `README.md` (solver, verification), `docs/TIER2-SCOPE.md` (feature list
     - Every card the scope table in `docs/TIER2-SCOPE.md` §2 names has a schema entry
     - A `Deck.Validate()` reports label, line number, and reason for each mismatch, and reports nothing for the 12 client decks
     - Existing passing tests remain passing
-  status: not started
+  status: done
 
 - task: Deck labeler for unlabelled or mislabelled decks — a grammar walk in `Atb.Core/Lin` that
     assigns `CARD x.y` labels to a bare `.lin` (the vendor samples in
