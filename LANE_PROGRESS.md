@@ -5,9 +5,20 @@ LANE.md is the contract; this tracks where we are in it — if they disagree, LA
 ## Current position
 
 - **Status:** round 1 autonomous run finished — all 7 items before the stop marker are done, none blocked; 200 tests pass on macOS. None of the four lane goals is fully proven yet, because the app has not been run on Windows.
-- **Next:** Body Summary screen, after a Windows trial of everything built so far.
+- **Next:** Round 1b — Run and Convert never overwrite existing files silently.
 - **Blockers:** Running the solver on a deck inside `cases/` overwrites that case's reference outputs, so copy the deck out first. A body made with GEBOD holds only the body cards and has to be merged into a full deck before it will run; Nate needs to say how. GEBOD also writes a settings file to the root of `C:\`, which a normal Windows user may not be allowed to do. The labeler item's done-when says three mislabelled `H.1.a` rows, but the client decks contain only one (`2479_2.LIN` line 321), which is fixed. Nate should amend that line in LANE.md to say one. The viewer keeps ATB 3I's screen axes, where the solver's +Z points down on screen; Nate should confirm that is what "Z up on screen" meant.
 - **Last updated:** 2026-09-12
+
+## Round 1b — acceptance-review fixes
+
+| Item | Status |
+|------|--------|
+| Run and Convert never overwrite existing files silently | not started |
+| Close the renumbering gaps | not started |
+| Validate the deck before Save and Run | not started |
+| Windows UI test robot | not started |
+| Merge GEBOD output into the open deck | not started |
+| Full Windows end-to-end pass | not started |
 
 ## Round 1 — core model, generic editor, run, viewer
 
