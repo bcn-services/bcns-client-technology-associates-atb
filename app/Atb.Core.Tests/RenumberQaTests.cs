@@ -200,4 +200,53 @@ public class RenumberQaTests
         Assert.DoesNotContain("40 CARD B.3.a", lines);
         Assert.Equal(before, deck.Write());
     }
+
+    // --- Delta (fix d2ff7e6): sign-carrying H fields. Fortran: H.1-H.8 Segment/Joint read as ABS(MSG)
+    // (heding_hcards.for:103, heding_ang_displ.for:82, heding_wind.for:72, heding_jnt_parm.for:72);
+    // KREF (Ref Segment) and H.9's joint (heding_joint_forces.for:51 JRF = MSG(II,9)) have no ABS.
+
+    [Fact]
+    public void InsertBeforeSegment3_NegativeH4Segment_ShiftsKeepingSign_NegativeRefSegmentUntouched()
+    {
+        var deck = WithLine("0    Card H.4", "2    -3    4    0    -5    Card H.4");   // pairs (Ref -3, Seg 4), (Ref 0, Seg -5)
+        Renumber.Insert(deck, Entity.Segment, 3, Renumber.Copy(deck, Entity.Segment, 3));
+        Assert.Equal("2 -3 5 0 -6", T(deck.Lines.Single(l => l.Is("H.4"))));
+    }
+
+    [Fact]
+    public void InsertBeforeJoint3_NegativeH7JointShifts_NegativeH9JointUntouched()
+    {
+        var text = File.ReadAllText(Fixture).Replace(H7, "1    -8    Card H.7").Replace(H9, "1    0    -8    Card H.9");
+        var deck = Deck.Parse(text);
+        Renumber.Insert(deck, Entity.Joint, 3, Renumber.Copy(deck, Entity.Joint, 3));
+        Assert.Equal("1 -9", T(deck.Lines.Single(l => l.Is("H.7"))));
+        Assert.Equal("1 0 -8", T(deck.Lines.Single(l => l.Is("H.9"))));
+    }
+
+    // input_h1_h3_cards.for: .a = KSG KREF MSG X Y Z NODPR (always 7 values); KSG <= 1 -> one dummy .b; else KSG-1 .b rows.
+    [Fact]
+    public void DeleteSegment3_H1LoneNegativeRow_CountZeroRowAndDummyB_H2DropsToOne()
+    {
+        var deck = WithLine("1    19    1    0    0    0    0    Card H.1.a", "1    19    -3    0    0    0    0    Card H.1.a");
+        Assert.NotNull(Renumber.Delete(deck, Entity.Segment, 3, _ => true));
+        var h = deck.Lines.SkipWhile(l => !l.Is("H.1.A")).Take(7).ToList();
+        Assert.Equal(["0 0 0 0 0 0 0", "0", "1 18 4 0 0 0 0", "0", "0 0 0 0 0 0 0", "0", "0"], h.Select(T));
+        Assert.Equal(["Card H.1.a", "Card H.1.b", "Card H.2.a", "Card H.2.b", "CARD H.1.a", "Card H.3.b", "Card H.4"], h.Select(l => l.Label));
+        Assert.Empty(deck.Validate());
+    }
+
+    [Fact]
+    public void DeleteSegment3_H2FirstRowByRefSegment_Dropped_NextRowPromotedIntoA()
+    {
+        var text = File.ReadAllText(Fixture)
+            .Replace("2    19    3    0    0    0    0    Card H.2.a", "3    3    1    0.5    0    0    0    Card H.2.a")
+            .Replace("    19    5    0    0    0    0    Card H.2.b",
+                     "    19    5    0    0    0    0    Card H.2.b\r\n    4    -7    1.5    0    0    2    Card H.2.b");
+        var deck = Deck.Parse(text);
+        Assert.Empty(deck.Validate());
+        Assert.NotNull(Renumber.Delete(deck, Entity.Segment, 3, _ => true));
+        var h = deck.Lines.SkipWhile(l => !l.Is("H.2.A")).Take(3).ToList();
+        Assert.Equal(["2 18 4 0 0 0 0", "3 -6 1.5 0 0 2", "0 0 0 0 0 0 0"], h.Select(T));   // row (3,1) gone, count 3 -> 2
+        Assert.Empty(deck.Validate());
+    }
 }

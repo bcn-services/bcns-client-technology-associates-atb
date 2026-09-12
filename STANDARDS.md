@@ -3,7 +3,7 @@
 ## Card schema
 - **Schema marks drive every rewrite**: code that changes references (Renumber) touches only fields whose CardSchema kind is g/j/p/e; a missing reference is fixed by adding the mark in CardSchema.cs, never by detecting it heuristically.
 - **Cite the source for each mark**: a new or changed field kind carries a comment naming the ATB 3I decomp file or the Fortran `src/*.for:line` that proves it (e.g. H.9 → heding_joint_forces.for:51).
-- **Signed refs**: H-card segment refs can be negative (the solver uses ABS and branches on the sign); compare on |v| and preserve the sign.
+- **Signed refs**: the H.1–H.8 Segment / Segment-or-Joint / H.7 Joint fields can be negative (the solver uses ABS and branches on the sign); compare those on |v| and preserve the sign. Ref Segment, H.9 joint and H.10.B are compared signed.
 
 ## Deck editing
 - **Byte-for-byte round-trip**: mutate lines through DeckLine.SetTokens / Set*, which clear Raw only when a token changes; untouched lines must write back byte-identical.
