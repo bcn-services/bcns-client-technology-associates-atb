@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using Atb.Core.Cards;
 
 namespace Atb.Core.Lin;
 
@@ -100,6 +102,128 @@ public sealed class Deck
         }
         return issues;
     }
+
+    /// Edit API: set token i of line from user text. Rewrites only that line (its Raw is dropped,
+    /// every other line keeps its original text). Returns null on success, else why the text was
+    /// refused (the line is left unchanged).
+    public string? Edit(DeckLine line, int i, string text)
+    {
+        if (i < 0 || i >= line.Count) return $"{line.Label} has no field {i + 1}";
+        var kind = CardSchema.KindOf(line.Card, i + CardSchema.Skip(line.Card, line.Count));
+        var token = ToToken(kind, line.Tokens[i].StartsWith('"'), text, out var error);
+        if (token == null) return error;
+        if (token != line.Tokens[i]) line.Set(i, token);
+        return null;
+    }
+
+    /// User text -> deck token for a field of the given kind (null kind: keep the old quoting).
+    static string? ToToken(Kind? kind, bool quoted, string text, out string? error)
+    {
+        error = null;
+        var v = text.Trim();
+        if (kind == Kind.Str || (kind == null && quoted)) return "\"" + text.Replace('"', '\'') + "\"";
+        bool whole = kind is Kind.Int or Kind.SegRef or Kind.JointRef or Kind.PlaneRef or Kind.FuncRef;
+        bool ok = whole ? int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out _)
+                        : double.TryParse(v.Replace('D', 'E').Replace('d', 'e'), NumberStyles.Float, CultureInfo.InvariantCulture, out _);
+        if (ok) return v;
+        error = $"'{text}' is not {(whole ? "a whole number" : "a number")}";
+        return null;
+    }
+
+    /// Rows of a card group (CardSchema.Screen.Cards): each primary line plus the continuation
+    /// lines that follow it, aligned to the group (null where a continuation line is absent).
+    public List<DeckLine?[]> Rows(IReadOnlyList<string> group)
+    {
+        var rows = new List<DeckLine?[]>();
+        for (int i = 0; i < Lines.Count; i++)
+        {
+            if (!Lines[i].Is(group[0])) continue;
+            var row = new DeckLine?[group.Count];
+            row[0] = Lines[i];
+            for (int g = 1, j = i + 1; g < group.Count; g++)
+                if (j < Lines.Count && Lines[j].Is(group[g])) row[g] = Lines[j++];
+            rows.Add(row);
+        }
+        return rows;
+    }
+
+    /// Tab-separated paste text -> deck lines labelled with the group's cards, in deck order.
+    /// Each row fills group[0], then each continuation card in turn (fixed cards take their field
+    /// count, a variable last card takes the rest; an all-empty continuation block means that line
+    /// is absent). A row whose tokens do not fit the schema is rejected whole.
+    // ponytail: E.1 group rows skip E.3 only via empty cells; row-to-row counts (B.1, D.1.A) are not updated.
+    public static PasteResult ParsePaste(string text, params string[] group)
+    {
+        var res = new PasteResult(new(), new());
+        var rows = text.Replace("\r\n", "\n").Split('\n');
+        for (int r = 0; r < rows.Length; r++)
+        {
+            if (rows[r].Trim().Length == 0) continue;
+            var cells = rows[r].Split('\t');
+            var lines = new List<DeckLine>();
+            string? why = null;
+            int pos = 0;
+            for (int g = 0; g < group.Length && why == null; g++)
+            {
+                if (!CardSchema.Cards.TryGetValue(group[g], out var spec)) { why = $"no schema entry for {group[g]}"; break; }
+                // fixed card: its field count; variable card (last in a group): every remaining cell
+                var chunk = cells.Skip(pos).Take(spec.Fits == null ? spec.Names.Length : cells.Length).ToArray();
+                pos += chunk.Length;
+                if (g > 0 && chunk.All(c => c.Trim().Length == 0)) continue;       // continuation line absent
+                var toks = new List<string>();
+                int skip = CardSchema.Skip(spec.Label, chunk.Length);
+                for (int i = 0; i < chunk.Length && why == null; i++)
+                {
+                    var t = ToToken(CardSchema.KindOf(spec.Label, i + skip), false, chunk[i], out var err);
+                    if (t == null) why = $"{spec.Label} field {i + 1}: {err}"; else toks.Add(t);
+                }
+                why ??= spec.Check(toks);
+                if (why == null) lines.Add(new DeckLine(toks, Labeler.LabelFor(spec.Label.ToUpperInvariant())));
+            }
+            if (why == null && cells.Skip(pos).Any(c => c.Trim().Length > 0))
+                why = $"{cells.Length} cells, more than {string.Join(" + ", group)} holds";
+            if (why == null) res.Lines.AddRange(lines); else res.Rejected.Add($"row {r + 1}: {why}");
+        }
+        return res;
+    }
+
+    /// Rows -> tab-separated text in the layout ParsePaste reads back (strings unquoted; an absent
+    /// fixed continuation line becomes empty cells).
+    public static string ToPasteText(IEnumerable<DeckLine?[]> rows, IReadOnlyList<string> group)
+    {
+        var sb = new StringBuilder();
+        foreach (var row in rows)
+        {
+            var cells = new List<string>();
+            for (int g = 0; g < group.Count; g++)
+                if (row[g] is { } l) cells.AddRange(Enumerable.Range(0, l.Count).Select(l.Str));
+                else if (CardSchema.Cards.TryGetValue(group[g], out var s) && s.Fits == null && g < group.Count - 1)
+                    cells.AddRange(Enumerable.Repeat("", s.Names.Length));
+            sb.Append(string.Join('\t', cells)).Append("\r\n");
+        }
+        return sb.ToString();
+    }
+
+    /// Names a reference column shows next to its number: segment n = n-th B.2.a, joint n = n-th
+    /// B.3.a, plane/function by their ID field (E.1, then E.6.a, then E.7.a).
+    // ponytail: one function namespace across E.1/E.6/E.7 (first match wins) — split per referring card if IDs collide.
+    public Dictionary<(Kind, int), string> RefNames()
+    {
+        var d = new Dictionary<(Kind, int), string>();
+        int n = 0;
+        foreach (var l in Cards("B.2.A")) if (l.Count > 0) d[(Kind.SegRef, ++n)] = l.Str(0);
+        n = 0;
+        foreach (var l in Cards("B.3.A")) if (l.Count > 0) d[(Kind.JointRef, ++n)] = l.Str(0);
+        void ById(Kind k, string card)
+        {
+            foreach (var l in Cards(card))
+                if (l.Count > 1 && int.TryParse(l.Tokens[0], out var id)) d.TryAdd((k, id), l.Str(1));
+        }
+        ById(Kind.PlaneRef, "D.2.A"); ById(Kind.FuncRef, "E.1"); ById(Kind.FuncRef, "E.6.A"); ById(Kind.FuncRef, "E.7.A");
+        return d;
+    }
 }
 
 public sealed record DeckIssue(int Line, string Label, string Reason);
+
+public sealed record PasteResult(List<DeckLine> Lines, List<string> Rejected);

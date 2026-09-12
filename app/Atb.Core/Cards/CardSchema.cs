@@ -5,8 +5,21 @@ public enum Kind { Str, Int, Real, SegRef, JointRef, PlaneRef, FuncRef }
 /// One CARD label: field names and kinds in token order, when the card appears, and (for cards
 /// whose token count varies) the rule the count must satisfy. Fixed cards: count == Names.Length.
 public sealed record CardSpec(string Label, string[] Names, Kind[] Kinds, string Appears,
-                              string? Rule = null, Func<IReadOnlyList<string>, bool>? Fits = null)
+                              string? Rule = null, Func<IReadOnlyList<string>, bool>? Fits = null, int Tail = 0)
 {
+    /// Index into Names for token i, or -1. Past the end of Names, variable cards repeat their
+    /// last Tail names (rep = 1-based repeat number, 0 for the first occurrence).
+    public int Slot(int i, out int rep)
+    {
+        rep = 0;
+        if (i < 0) return -1;
+        if (i < Names.Length) return i;
+        if (Tail <= 0 || Tail > Names.Length) return -1;
+        int k = Names.Length - Tail;
+        rep = (i - k) / Tail;
+        return k + (i - k) % Tail;
+    }
+
     /// null when the tokens fit this card, else the reason they do not.
     public string? Check(IReadOnlyList<string> t) => Fits == null
         ? (t.Count == Names.Length ? null : $"expected {Names.Length} tokens, found {t.Count}")
@@ -45,9 +58,9 @@ public static class CardSchema
     static Dictionary<string, CardSpec> Build()
     {
         var d = new Dictionary<string, CardSpec>(StringComparer.OrdinalIgnoreCase);
-        void F(string label, string appears, params string[] f) => V(label, appears, null, null, f);
-        void V(string label, string appears, string? rule, Func<IReadOnlyList<string>, bool>? fits, params string[] f) =>
-            d.Add(label, new CardSpec(label, f.Select(x => x[2..]).ToArray(), f.Select(x => KindCode[x[0]]).ToArray(), appears, rule, fits));
+        void F(string label, string appears, params string[] f) => V(label, appears, null, null, 0, f);
+        void V(string label, string appears, string? rule, Func<IReadOnlyList<string>, bool>? fits, int tail, params string[] f) =>
+            d.Add(label, new CardSpec(label, f.Select(x => x[2..]).ToArray(), f.Select(x => KindCode[x[0]]).ToArray(), appears, rule, fits, tail));
 
         // A: title, units, integration control, print control
         F("A.1.A", "always", "s:Date");
@@ -88,7 +101,7 @@ public static class CardSchema
         F("C.2.A", "always", Cat(["r:Angle1", "r:Angle2", "r:Angle3", "r:Initial Velocity", "r:Time Duration"], Xyz("r", "Vehicle Origin"),
           ["i:Interpolated Points", "r:Start Time", "r:Interval", "i:Motion Reference", "g:Reference Segment", "g:Vehicle Segment"]));
         F("C.2.B", "after C.2.A when Interpolated Points < 0", "i:Spline Data Type", "i:Spline Degree", "i:Number of Data Points", "r:Angular Vx", "r:Angular Vy", "r:Angular Vz");
-        V("C.3", "after C.2.A when Interpolated Points > 0 (written unlabelled)", "1-12 values per line", t => t.Count is >= 1 and <= 12, "r:Deceleration");
+        V("C.3", "after C.2.A when Interpolated Points > 0 (written unlabelled)", "1-12 values per line", t => t.Count is >= 1 and <= 12, 1, "r:Deceleration");
         F("C.4", "after C.2.B when Spline Data Type = 0", Cat(Xyz("r", "Linear"), Xyz("r", "Angular")));
         F("C.5", "after C.2.B when Spline Data Type > 0", Cat(["r:Time"], Xyz("r", "Linear"), Xyz("r", "Angular")));
 
@@ -104,7 +117,7 @@ public static class CardSchema
         // ponytail: Type 5 constraints carry a second D.6 line (effective masses, spring, damping, ref length) — not
         // in the corpus, so its layout is unverified; the count check here covers the first line only.
         F("D.6", "one per constraint (D.1.A NQ)", Cat(["i:Type", "g:Segment A ID", "g:Segment B ID"], Xyz("r", "Point on A"), Xyz("r", "Point on B")));
-        V("D.7", "always, one value per segment", Per18, UpTo18, "i:Symmetry Option");
+        V("D.7", "always, one value per segment", Per18, UpTo18, 1, "i:Symmetry Option");
         F("D.8", "one per spring-damper (D.1.A NSD)", Cat(["g:Segment M ID", "g:Segment N ID"], Xyz("r", "Point on M"), Xyz("r", "Point on N"),
           ["r:Coef D0", "r:Coef A1", "r:Coef A2", "r:Coef B1", "r:Coef B2"]));
         F("D.9", "one per applied force (D.1.A NFORCE)", Cat(["g:Applied SegID", "f:Force Function ID"], Xyz("r", "Force Location"),
@@ -123,21 +136,21 @@ public static class CardSchema
         F("E.7.C", "after E.7.B", "i:NTheta", "i:NPhi");
 
         // F: contact allocation
-        V("F.1.A", "always, one value per plane", Per18, UpTo18, "i:MNPL");
+        V("F.1.A", "always, one value per plane", Per18, UpTo18, 1, "i:MNPL");
         F("F.1.B", "sum of F.1.A lines", Cat(["p:Plane", "g:Plane Segment", "g:Contact Segment", "i:Contact Ellip"], FiveFuncs, ["i:Edge Test", "i:Output"]));   // solver: ..., NX, NOUT
-        V("F.3.A", "always, one value per segment", Per18, UpTo18, "i:MNSEG");
+        V("F.3.A", "always, one value per segment", Per18, UpTo18, 1, "i:MNSEG");
         F("F.3.B", "sum of F.3.A lines", Cat(["g:Segment A", "i:Segment A Ellip", "g:Segment B", "i:Segment B Ellip"], FiveFuncs, ["i:Output"]));
-        V("F.4.A", "always, one value per joint", Per18, UpTo18, "i:IGLOB");
+        V("F.4.A", "always, one value per joint", Per18, UpTo18, 1, "i:IGLOB");
         F("F.4.B", "one per joint with F.4.A IGLOB != 0", "j:Joint", "i:Not Used 1", "i:Not Used 2", "i:Not Used 3",
           "f:F1 (Torq-Def)", "f:F2 (Herron Eq)", "f:F3 (R)", "f:F4 (G)", "f:Friction");
-        V("F.7.A", "when D.1.A NWINDF > 0, one value per segment", Per18, UpTo18, "i:MWSEG");
+        V("F.7.A", "when D.1.A NWINDF > 0, one value per segment", Per18, UpTo18, 1, "i:MWSEG");
         F("F.7.B", "one per wind contact", "g:Contact Segment", "i:Contact Ellip", "g:Wind Plane Segment", "p:Wind Plane",
           "f:Wind Function", "f:Drag Coef Function", "i:Blocking");
-        V("F.7.C", "after F.7.B when Blocking != 0", "1-18 segment/ellipsoid pairs", t => t.Count is >= 2 and <= 36 && t.Count % 2 == 0,
+        V("F.7.C", "after F.7.B when Blocking != 0", "1-18 segment/ellipsoid pairs", t => t.Count is >= 2 and <= 36 && t.Count % 2 == 0, 2,
           "g:Blocking Segment", "i:Blocking Ellip");
         F("F.8.A", "one per harness (D.1.A NHRNSS)", Cat(Seq("i:Belts in Harness #", 5), ["i:Max Iteration", "r:Max Strain Convergence"]));
         // solver src/input_harness.for:107 (NPTSPB); ATB 3I ReadFile reads it only for harnesses with belts.
-        V("F.8.B", "one per harness with F.8.A belts > 0, one value per belt", Per18, UpTo18, "i:Points per Belt");
+        V("F.8.B", "one per harness with F.8.A belts > 0, one value per belt", Per18, UpTo18, 1, "i:Points per Belt");
         F("F.8.C", "one per harness belt", "f:Strain F1", "f:Strain F2", "f:Strain F3", "f:Strain F4", "i:Not Used", "r:Initial Slack");
         F("F.8.D1", "one per belt point", Cat(["g:Ref Point Segment", "i:Ref Point Ellip", "i:Preferred Direction", "r:Delta R"], FiveFuncs, Xyz("r", "Point Loc")));
         F("F.8.D2", "after F.8.D1", Cat(Xyz("r", "Offset"), Xyz("r", "Direction Vec")));
@@ -153,15 +166,15 @@ public static class CardSchema
         // H: output selection. H.1-H.3: first row leads with Count (7 tokens), each further row drops it (6).
         foreach (var n in new[] { 1, 2, 3 })
         {
-            V($"H.{n}.A", "always; first row of the selection", "7 tokens (first row) or 6 (continuation row)", t => t.Count is 7 or 6, H13);
-            V($"H.{n}.B", "continuation rows; a lone 0 or empty row when Count <= 1", "0, 1 or 6 tokens", t => t.Count is 0 or 1 or 6, H13[1..]);
+            V($"H.{n}.A", "always; first row of the selection", "7 tokens (first row) or 6 (continuation row)", t => t.Count is 7 or 6, 0, H13);
+            V($"H.{n}.B", "continuation rows; a lone 0 or empty row when Count <= 1", "0, 1 or 6 tokens", t => t.Count is 0 or 1 or 6, 0, H13[1..]);
         }
         foreach (var n in new[] { 4, 5, 6, 8, 9 })
-            V($"H.{n}", "always", "1 + 2 x Count tokens", CountPairs, H4_9);
-        V("H.7", "always", "1 + Count tokens", CountList, H7_11);
-        V("H.11", "always", "1 + Count tokens", CountList, H7_11);
+            V($"H.{n}", "always", "1 + 2 x Count tokens", CountPairs, 2, H4_9);
+        V("H.7", "always", "1 + Count tokens", CountList, 1, H7_11);
+        V("H.11", "always", "1 + Count tokens", CountList, 1, H7_11);
         F("H.10.A", "always", "i:MCG");
-        V("H.10.B", "one per total body (H.10.A MCG)", "2 + Segments in Body tokens", t => Lead(t, 1) >= 0 && t.Count == 2 + Lead(t, 1),
+        V("H.10.B", "one per total body (H.10.A MCG)", "2 + Segments in Body tokens", t => Lead(t, 1) >= 0 && t.Count == 2 + Lead(t, 1), 1,
           "i:Total Body ID", "i:Segment Count", "g:Segments in Body");
         F("H.10.C", "after H.10.B", Cat(Xyz("r", "Body Axis Origin"), ["r:Body Axis Rotation - Z", "r:Body Axis Rotation - Y", "r:Body Axis Rotation - X",
           "i:1st Rotation", "i:2nd Rotation", "i:3rd Rotation", "i:Option"]));
@@ -174,7 +187,65 @@ public static class CardSchema
     public static readonly Dictionary<string, string[]> Fields =
         Cards.ToDictionary(kv => kv.Key, kv => kv.Value.Names, StringComparer.OrdinalIgnoreCase);
 
-    /// Header for token i of a card: schema name, else "Value i+1".
-    public static string Header(string card, int i) =>
-        Fields.TryGetValue(card, out var f) && i < f.Length ? f[i] : $"Value {i + 1}";
+    /// Header for column i of a card: schema name ("Ref Segment 2" for a repeated group), else "Value i+1".
+    public static string Header(string card, int i) => TryHeader(card, i) ?? $"Value {i + 1}";
+
+    /// Schema header for column i, or null when the schema does not cover that column.
+    public static string? TryHeader(string card, int i)
+    {
+        if (!Cards.TryGetValue(card, out var s)) return null;
+        int k = s.Slot(i, out var rep);
+        return k < 0 ? null : rep == 0 ? s.Names[k] : $"{s.Names[k]} {rep + 1}";
+    }
+
+    public static Kind? KindOf(string card, int i) =>
+        Cards.TryGetValue(card, out var s) && s.Slot(i, out _) is var k and >= 0 ? s.Kinds[k] : null;
+
+    /// Column offset of a line's first token: H.n.A continuation rows drop the leading Count.
+    public static int Skip(string card, int count) =>
+        card.ToUpperInvariant() is "H.1.A" or "H.2.A" or "H.3.A" && count == 6 ? 1 : 0;
+
+    /// One grid screen: its ATB 3I menu title (docs/TIER2-SCOPE.md §2) and the card group it
+    /// edits. Cards[0] makes the rows; the rest are continuation lines shown as extra columns
+    /// when present right after it. Only the last card of a group may be variable-length.
+    public sealed record Screen(string Title, string[] Cards)
+    {
+        public string Name => $"{Title} [{string.Join(", ", Cards)}]";
+    }
+
+    // ponytail: non-grid screens (Body Summary, GEBOD, Weight Balancing) and unlabelled data rows
+    // (C.3 decelerations, E.4/E.6/E.7 tables) are left to their own LANE items.
+    public static readonly Screen[] Screens =
+    [
+        new("Run Control", ["A.1.A", "A.1.B", "A.1.C"]), new("Run Control", ["A.3"]), new("Run Control", ["A.4"]),
+        new("General / Diagnostic Output Control Parameters", ["A.5"]),
+        new("Segment Definition", ["B.2.A", "B.2.B"]), new("Segment Definition", ["B.6"]),
+        new("Joint Definition", ["B.3.A", "B.3.B", "B.3.C"]), new("Joint Definition", ["B.4.A", "B.4.B"]),
+        new("Joint Definition", ["B.5.A", "B.5.B", "B.5.C"]),
+        new("Vehicle Motion", ["C.1"]), new("Vehicle Motion", ["C.2.A", "C.2.B"]), new("Vehicle Motion", ["C.4"]), new("Vehicle Motion", ["C.5"]),
+        new("Symmetry Condition", ["D.7"]),
+        new("Contact Plane Definition", ["D.2.A", "D.2.B", "D.2.C", "D.2.D"]),
+        new("Contact Ellipsoid Definition", ["D.5"]), new("Constraint Definition", ["D.6"]),
+        new("Spring Damper Definition", ["D.8"]), new("Applied Force/Torque Definition", ["D.9"]),
+        new("Force Deflection Function Definition", ["E.1", "E.2", "E.3", "E.4.A"]),
+        new("Wind Force Function Definition", ["E.6.A", "E.6.B", "E.6.C"]),
+        new("Joint Stiffness Function Definition", ["E.7.A", "E.7.B", "E.7.C"]),
+        new("Plane/Segment Contact", ["F.1.B"]), new("Segment/Segment Contact", ["F.3.B"]),
+        new("Globalgraphic Joint Definition", ["F.4.B"]),
+        new("Wind Force Contact Definition", ["F.7.B", "F.7.C"]),
+        new("Harness Belt Definition", ["F.8.A"]), new("Harness Belt Definition", ["F.8.C"]),
+        new("Harness Belt Definition", ["F.8.D1", "F.8.D2"]),
+        new("Joint Actuator Definition", ["F.10"]),
+        new("Velocity Data Source", ["G.1"]), new("Reference Segment Initial Position and Velocity", ["G.2"]),
+        new("Segment Initial Rotation and Angular Velocity", ["G.3.A"]),
+        new("Linear Acceleration / Velocity / Position Output", ["H.1.A"]), new("Linear Acceleration / Velocity / Position Output", ["H.1.B"]),
+        new("Linear Acceleration / Velocity / Position Output", ["H.2.A"]), new("Linear Acceleration / Velocity / Position Output", ["H.2.B"]),
+        new("Linear Acceleration / Velocity / Position Output", ["H.3.A"]), new("Linear Acceleration / Velocity / Position Output", ["H.3.B"]),
+        new("Angular Acceleration / Velocity / Position Output", ["H.4"]), new("Angular Acceleration / Velocity / Position Output", ["H.5"]),
+        new("Angular Acceleration / Velocity / Position Output", ["H.6"]),
+        new("Joint Parameter / Actuator Output", ["H.7"]), new("Joint Parameter / Actuator Output", ["H.11"]),
+        new("Wind Force Time History Output", ["H.8"]), new("Joint Forces/Torques Output", ["H.9"]),
+        new("Total Body Definition", ["H.10.A"]), new("Total Body Definition", ["H.10.B"]), new("Total Body Definition", ["H.10.C"]),
+        new("HIC and CSI Definition", ["H.12.A"]), new("HIC and CSI Definition", ["H.12.B"]),
+    ];
 }

@@ -11,7 +11,7 @@ public class CardSchemaTests
     public static IEnumerable<object[]> ClientDecks() => Fixtures.ClientDecks().Select(p => new object[] { p });
 
     /// docs/TIER2-SCOPE.md §2 cards, expanded to the concrete labels the decks carry.
-    static readonly string[] ScopeLabels =
+    internal static readonly string[] ScopeLabels =
     [
         "A.1.A", "A.1.B", "A.1.C", "A.3", "A.4", "A.5",
         "B.1", "B.2.A", "B.2.B", "B.3.A", "B.3.B", "B.3.C", "B.4.A", "B.4.B", "B.5.A", "B.5.B", "B.5.C", "B.6",
