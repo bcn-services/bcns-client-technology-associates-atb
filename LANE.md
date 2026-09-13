@@ -219,7 +219,7 @@ Context: `README.md` (solver, verification), `docs/TIER2-SCOPE.md` (feature list
     - macOS `dotnet test app/Atb.sln` is unaffected by the new project
   done when:
     - A dispatched `app-e2e.yml` run on the item branch completes green, and its artifact holds the published app folder with `atb-win32.exe` beside `ATB.exe`, a screenshot per scenario step, and the `cmp.py` report (run URL in the item report)
-    - In that run each `cases/*.LIN` edit + Save differs from the original in exactly the edited token, Run on `2479_2.LIN` yields outputs `cmp.py` accepts, and the renumbered deck runs to completion
+    - In that run each `cases/*.LIN` edit + Save differs from the original in exactly the edited token; Run on `2479_2.LIN` through the app yields `.aou/.sa1/.t2x` identical to a direct `atb-win32.exe` run of the same deck in the same job, per `frontend/probe/compare.py cross` with `frontend/package/volatile.txt` (the solver's results vary by runner CPU, so the references are not the gate), with `cmp.py`'s report against the references uploaded alongside; and the renumbered deck runs to completion
     - The viewer scenario plays every `.sa1` with no error dialog, and its screenshots are listed in the item report with what each shows
     - `app/Atb.Core.Tests/fixtures/gebod-50m.ain` is committed from the probe, and the item report says whether `Gebodv.exe` succeeds without `C:\ATBFIG.SYS`
   status: not started
