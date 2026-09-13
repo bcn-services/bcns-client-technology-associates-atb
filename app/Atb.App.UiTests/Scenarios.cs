@@ -64,21 +64,32 @@ public class Scenarios
         Assert.Empty(r.Unexpected());
     }
 
-    /// Edit > Add row on segment 1 (Renumber inserts a copy as segment 2), Save, Run to completion.
+    /// Insert before segment 3 (the lane's Renumber case): Add row on segment 2 puts a copy at 3, then Add row on
+    /// joint 1 puts its copy at joint 2. ATB hangs segment j+1 on joint j (input_linear.for reads a G.2 free-body card
+    /// for every segment whose JNT(I-1) has no proximal segment), so a segment added without a joint leaves the deck
+    /// one G.2 card short and the solver misreads G.3.a (STOP 24). Save, Run to completion.
     [Fact]
     public void InsertSegmentRun()
     {
         var copy = Robot.TempCopy("cases/2479/2479_2.LIN", "ins");
-        int before = Deck.Load(copy).SegmentCount;
+        var d0 = Deck.Load(copy);
+        int segs = d0.SegmentCount, joints = d0.JointCount;
         using var r = new Robot("insert-segment-2479_2", copy);
         r.SelectScreen(SegScreen);
-        r.Click(r.Cell(Weight0));
-        r.Shot("segment-1-selected");
+        r.Click(r.Cell("Weight Row 1"));
+        r.Shot("segment-2-selected");
         Robot.Press(VirtualKeyShort.CONTROL, VirtualKeyShort.INSERT);
-        r.Cell($"Weight Row {before}");                 // the grid grew by one row
+        r.Cell($"Weight Row {segs}");                   // the grid grew by one row
         r.Shot("segment-inserted");
+        r.SelectScreen("Joint Definition [B.3.A, B.3.B, B.3.C]");
+        r.Click(r.Cell("Name Row 0"));
+        r.Shot("joint-1-selected");
+        Robot.Press(VirtualKeyShort.CONTROL, VirtualKeyShort.INSERT);
+        r.Cell($"Name Row {joints}");
+        r.Shot("joint-inserted");
         r.SaveDeck(copy);
-        Assert.Equal(before + 1, Deck.Load(copy).SegmentCount);
+        var d1 = Deck.Load(copy);
+        Assert.Equal((segs + 1, joints + 1), (d1.SegmentCount, d1.JointCount));
         var outDir = Path.Combine(Robot.Work, "ins", "out"); Directory.CreateDirectory(outDir);
         r.RunDeck(Path.Combine(outDir, "2479_2_ins"));
         foreach (var ext in new[] { ".aou", ".t21" })
