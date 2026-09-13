@@ -319,8 +319,35 @@ public static class Renumber
     static int InsertAt(Deck d, string[] group, int n)
     {
         var rows = d.Rows(group);
-        if (rows.Count == 0) throw new InvalidOperationException($"No {group[0]} line to place the new one next to.");
+        if (rows.Count == 0) return Place(d, group[0]);
         return n <= rows.Count ? d.Lines.IndexOf(rows[n - 1][0]!) : d.Lines.IndexOf(rows[^1].Last(l => l != null)!) + 1;
+    }
+
+    // Card order of the deck grammar (Labeler.Walk / ATB 3I WriteFile). "F.9" covers every F.9.x card.
+    static readonly string[] Order =
+    [
+        "A.1.A", "A.1.B", "A.1.C", "A.3", "A.4", "A.5", "B.1", "B.2.A", "B.2.B", "B.3.A", "B.3.B", "B.3.C", "B.4.A", "B.4.B",
+        "B.5.A", "B.5.B", "B.5.C", "B.6", "C.1", "C.2.A", "C.2.B", "C.3", "C.4", "C.5", "D.1.A", "D.1.B", "D.2.A", "D.2.B", "D.2.C",
+        "D.2.D", "D.5", "D.6", "D.7", "D.8", "D.9", "E.1", "E.2", "E.3", "E.4.A", "E.6.A", "E.6.B", "E.6.C", "E.7.A", "E.7.B", "E.7.C",
+        "F.1.A", "F.1.B", "F.2.A", "F.2.B", "F.3.A", "F.3.B", "F.4.A", "F.4.B", "F.6", "F.7.A", "F.7.B", "F.7.C", "F.8.A", "F.8.B",
+        "F.8.C", "F.8.D1", "F.8.D2", "F.9", "F.10", "G.1", "G.2", "G.3.A", "H.1.A", "H.1.B", "H.2.A", "H.2.B", "H.3.A", "H.3.B",
+        "H.4", "H.5", "H.6", "H.7", "H.8", "H.9", "H.10.A", "H.10.B", "H.10.C", "H.11", "H.12.A", "H.12.B",
+    ];
+
+    static int Rank(string card)
+    {
+        int i = Array.IndexOf(Order, card.ToUpperInvariant());
+        return i >= 0 ? i : card.StartsWith("F.9.", StringComparison.OrdinalIgnoreCase) ? Array.IndexOf(Order, "F.9") : -1;
+    }
+
+    /// Line index where a card with no line in the deck yet goes: before the first labelled line that comes later
+    /// in the grammar. Placement only; nothing is renumbered. Unlabelled data rows stay with the card above them.
+    internal static int Place(Deck d, string card)
+    {
+        int r = Rank(card);
+        if (r < 0) throw new InvalidOperationException($"No place in the deck grammar for {card}.");
+        int i = d.Lines.FindIndex(l => Rank(l.Card) > r);
+        return i < 0 ? d.Lines.Count : i;
     }
 
     /// Token indexes of l whose schema kind is one of kinds.

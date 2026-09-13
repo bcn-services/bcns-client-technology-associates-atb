@@ -27,6 +27,7 @@ public sealed class MainForm : Form
         Text = "ATB"; Width = 1200; Height = 750; StartPosition = FormStartPosition.CenterScreen;
         var menu = new MenuStrip();
         var file = new ToolStripMenuItem("&File");
+        file.DropDownItems.Add(Item("&New", Keys.Control | Keys.N, NewDeck));
         file.DropDownItems.Add(Item("&Open...", Keys.Control | Keys.O, OpenDialog));
         file.DropDownItems.Add(Item("&Save", Keys.Control | Keys.S, Save));
         file.DropDownItems.Add("Save &As...", null, (_, _) => SaveAs());
@@ -73,7 +74,21 @@ public sealed class MainForm : Form
     public void Open(string path)
     {
         deck = Deck.Load(path); deckPath = path; dirty = false;
-        Text = $"ATB — {Path.GetFileName(path)}";
+        ShowDeck();
+    }
+
+    /// File > New: ATB 3I's empty deck (FileManager.CreateEmptyFile), unsaved.
+    void NewDeck()
+    {
+        if (running || (dirty && !ConfirmDiscard())) return;
+        deck = GebodMerge.NewDeck(); deckPath = null; dirty = true;
+        ShowDeck();
+    }
+
+    void ShowDeck()
+    {
+        if (deck == null) return;
+        Text = $"ATB — {(deckPath == null ? "untitled" : Path.GetFileName(deckPath))}";
         status.Text = $"{deck.Title}: {deck.SegmentCount} segments, {deck.JointCount} joints, {deck.Lines.Count} lines";
         if (cards.SelectedItem is CardSchema.Screen s) ShowScreen(s); else cards.SelectedIndex = 0;
     }
@@ -400,16 +415,18 @@ public sealed class MainForm : Form
     }
 
     /// Tools > GEBOD: collect the GEBOD V.2 fields, answer the unmodified Gebodv.exe over stdin in a scratch dir
-    /// (it finds GEBOD.DAT and writes GEBOD.ain in the folder named by C:\ATBFIG.SYS), save GEBOD.ain where the
-    /// user picks, then send it through the existing .ain -> .lin convert, which opens the .lin in the grid.
+    /// (it finds GEBOD.DAT and writes GEBOD.ain in the folder named by C:\ATBFIG.SYS), then merge GEBOD.ain's body
+    /// into the open deck (a new empty deck when none is open) at the chosen placement, as ATB 3I does.
     async Task Gebod()
     {
-        if (running || (dirty && !ConfirmDiscard())) return;
-        using var f = new GebodForm();
+        if (running) return;
+        var target = deck ?? GebodMerge.NewDeck();
+        using var f = new GebodForm(GebodMerge.BodyStarts(target).Count);
         if (f.ShowDialog(this) != DialogResult.OK || f.Request == null) return;
-        using var save = new SaveFileDialog { Filter = "ATB fixed-format input (*.ain)|*.ain", FileName = "GEBOD.ain", Title = "Save GEBOD output" };
-        if (save.ShowDialog(this) != DialogResult.OK) return;
-        var req = f.Request; var dims = f.BodyDims; var dest = save.FileName;
+        var place = f.Placement;
+        if (place.Mode == GebodMode.Replace &&
+            MessageBox.Show(this, GebodForm.ReplaceText, "GEBOD", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        var req = f.Request; var dims = f.BodyDims; string? ain = null;
         var exe = Path.Combine(AppContext.BaseDirectory, "Gebodv.exe");
         var work = Path.Combine(SolverRun.ShortWorkRoot(), "gebod");
         var o = new RunOptions { ExePath = exe, WorkDir = work, InputBase = "GEBOD", OutputBase = "GEBOD", Mode = FeedMode.Stdin, Job = SolverMode.ConvertAin,
@@ -437,7 +454,7 @@ public sealed class MainForm : Form
                 try { return sr.Run(o); }
                 finally { if (old != null) File.WriteAllBytes(fig, old); else File.Delete(fig); }
             });
-            if (r.Success) File.Copy(Path.Combine(work, "GEBOD.ain"), dest, true);
+            if (r.Success) ain = File.ReadAllText(Path.Combine(work, "GEBOD.ain"));
         }
         catch (Exception ex)
         {
@@ -449,9 +466,12 @@ public sealed class MainForm : Form
         try { Directory.Delete(work, true); } catch { }
         if (r.Error == "cancelled") { status.Text = "GEBOD cancelled."; return; }
         if (!r.Success) { MessageBox.Show(this, $"GEBOD failed (exit {r.ExitCode}): {r.Error}\n\n{sr.LogText}", "GEBOD", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
-        status.Text = "GEBOD wrote " + dest;
-        // ponytail: GEBOD.ain holds only the body (B) cards; ATB 3I merged it into a full deck. Converting it alone may fail — upgrade when a merge-into-deck step is specified.
-        await RunSolver(SolverMode.ConvertAin, dest);
+        Deck merged;
+        try { merged = GebodMerge.Merge(target, ain!, place); }   // works on a copy: a failure leaves the open deck as it was
+        catch (Exception ex) { MessageBox.Show(this, "GEBOD output could not be merged: " + ex.Message, "GEBOD", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        if (deck == null) deckPath = null;
+        deck = merged; dirty = true;
+        ShowDeck();
     }
 
     void OpenSa1()
