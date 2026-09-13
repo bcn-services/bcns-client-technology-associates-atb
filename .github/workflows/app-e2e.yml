@@ -113,7 +113,7 @@ jobs:
           O="$(cygpath -u "$E2E_OUT")"; W="$(cygpath -u "$WORK")"
           mkdir -p "$O/app" "$O/outputs"
           cp -R out/app/. "$O/app/" 2>/dev/null || true
-          for d in 2479_2 direct ins; do [ -d "$W/$d" ] && cp -R "$W/$d" "$O/outputs/"; done
+          for d in 2479_2 direct ins gebod-new; do [ -d "$W/$d" ] && cp -R "$W/$d" "$O/outputs/"; done
           cp "$W/cases.txt" "$O/outputs/" 2>/dev/null || true
           find "$O/shots" -name '*.png' 2>/dev/null | sort > "$O/screenshots.txt"; wc -l < "$O/screenshots.txt"
 

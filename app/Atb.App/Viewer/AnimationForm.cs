@@ -12,7 +12,7 @@ public sealed class AnimationForm : Form
     readonly TrackBar slider; readonly Label clock = new() { AutoSize = true, Anchor = AnchorStyles.Left, Padding = new(6, 8, 6, 0) };
     readonly Button play = new() { Text = "Play", Width = 60 };
     readonly NumericUpDown speed = new() { DecimalPlaces = 2, Increment = 0.05m, Minimum = 0.01m, Maximum = 10, Value = 0.1m, Width = 70 };
-    readonly ComboBox follow = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
+    readonly ComboBox follow = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200, AccessibleName = "Camera" };
     double wall; DateTime last; int shown; bool syncing;
 
     public AnimationForm(Sa1File file)

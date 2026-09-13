@@ -73,6 +73,7 @@ public sealed class GebodForm : Form
             t.Controls.Add(l1); t.Controls.Add(units[i]); t.SetColumnSpan(units[i], 2);
             t.Controls.Add(l2); t.Controls.Add(values[i]); t.Controls.Add(ranges[i]);
             dimRows[i] = [l1, units[i], l2, values[i], ranges[i]];
+            units[i].AccessibleName = l1.Text; values[i].AccessibleName = names[i];
             int k = i; units[i].SelectedIndexChanged += (_, _) => ShowRange(k);
         }
         Row("Units for Output Data Set", output);
@@ -114,7 +115,7 @@ public sealed class GebodForm : Form
     {
         var l = new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left };
         t.Controls.Add(l); t.Controls.Add(c); t.SetColumnSpan(c, 2);
-        c.Tag = l;
+        c.Tag = l; c.AccessibleName = label;   // UIA name = the visible label (screen readers, the UI robot)
     }
 
     static void Show(Control c, bool on) { c.Visible = on; if (c.Tag is Label l) l.Visible = on; }

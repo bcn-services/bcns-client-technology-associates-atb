@@ -24,6 +24,21 @@ public sealed class SolverJobTests : IDisposable
         Assert.Equal(new[] { "y", "", "l", "in", "out" }, SolverJob.Answers(SolverMode.RunLin, "in", "out"));
     }
 
+    /// Tails of real .aou files from the macOS solver: a New + GEBOD deck (STOP 1, 0 steps) and the same deck cut at
+    /// 9000 bytes (exit 2, .aou stops after the NPRT array).
+    [Fact]
+    public void AouEndedNormally_OnlyWithTheClosingTimingBlock()
+    {
+        const string done = "0Total                    0.00       NaN\n\n\n\n The run started at:  7:46:37pm; Sep. 12, 2026\n"
+                          + " The run ended at:    7:46:37pm; Sep. 12, 2026\n\n  Elapsed CPU time:    0(days)  0(hr)  0(min)  0.004(sec)\n";
+        const string cut = "     NDINT =   4     NSTEPS =    0     DT =0.002000\n0 NPRT Array\n     1  2  3\n     0  0  1\n0";
+        Assert.True(SolverJob.AouEndedNormally(done));
+        Assert.False(SolverJob.AouEndedNormally(cut));
+        Assert.False(SolverJob.AouEndedNormally(""));
+        Assert.False(SolverJob.AouEndedNormally(done[..done.IndexOf(" The run ended", StringComparison.Ordinal)]));   // started, never ended
+        Assert.False(SolverJob.AouEndedNormally(done[..done.IndexOf("  Elapsed", StringComparison.Ordinal)]));        // ended line, no timing
+    }
+
     [Fact]
     public void Answers_ConvertAin_FollowsSolverPrompts()
     {

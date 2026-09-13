@@ -36,7 +36,7 @@ public sealed class Robot : IDisposable
     public readonly Application App;
     public readonly Window Main;
     public readonly string MainTitle;
-    readonly string scenario, shots; int n;
+    readonly string scenario, shots; int n; readonly IntPtr mainHwnd;
     ConditionFactory Cf => A.ConditionFactory;
 
     public Robot(string scenario, string? deck = null)
@@ -48,7 +48,7 @@ public sealed class Robot : IDisposable
         if (deck != null) psi.ArgumentList.Add(deck);
         App = Application.Launch(psi);
         Main = App.GetMainWindow(A, TimeSpan.FromSeconds(60)) ?? throw new InvalidOperationException("ATB main window did not appear");
-        MainTitle = Main.Name;
+        MainTitle = Main.Name; mainHwnd = Main.Properties.NativeWindowHandle.ValueOrDefault;
         Main.SetForeground(); Wait.UntilInputIsProcessed();
         Log($"launched pid {App.ProcessId} '{MainTitle}' deck={deck}");
     }
@@ -109,9 +109,45 @@ public sealed class Robot : IDisposable
     public string DialogText(AutomationElement w) => string.Join(" | ", w.FindAllDescendants(Cf.ByControlType(ControlType.Text)).Select(e => e.Name));
 
     /// Windows other than the main window and the named allowed ones: an error box, an exception dialog, ...
+    /// The main window is matched by handle too: its title changes with the deck (File > New, Save As).
     public List<string> Unexpected(params string[] allowedPrefixes) =>
-        Windows().Where(w => w.Name != MainTitle && !allowedPrefixes.Any(p => w.Name.StartsWith(p, StringComparison.Ordinal)))
+        Windows().Where(w => w.Name != MainTitle && w.Properties.NativeWindowHandle.ValueOrDefault != mainHwnd
+                             && !allowedPrefixes.Any(p => w.Name.StartsWith(p, StringComparison.Ordinal)))
                  .Select(w => $"{w.Name} [{w.ClassName}] {DialogText(w)}").ToList();
+
+    public AutomationElement WaitDialog(string title, double sec = 30) => Until(() => Dialog(title), sec, $"'{title}' dialog");
+    public AutomationElement Named(AutomationElement within, ControlType t, string name) =>
+        Until(() => within.FindFirstDescendant(Cf.ByControlType(t).And(Cf.ByName(name))), 10, $"{t} '{name}'");
+
+    /// A combo box's shown text (ValuePattern, else the selected list item).
+    public static string ComboText(AutomationElement cb) =>
+        cb.Patterns.Value.PatternOrDefault?.Value.ValueOrDefault is { Length: > 0 } v ? v : cb.AsComboBox().SelectedItem?.Text ?? "";
+
+    /// Pick `item` in the combo box named `combo` with the mouse (opens the list, clicks the item by its text), so the
+    /// app sees a real SelectedIndexChanged. Throws unless the box then shows `item`.
+    public void Choose(AutomationElement within, string combo, string item)
+    {
+        var cb = Named(within, ControlType.ComboBox, combo);
+        var cond = Cf.ByControlType(ControlType.ListItem).And(Cf.ByName(item));
+        Click(cb);
+        Until(() =>
+        {
+            var li = cb.FindFirstDescendant(cond)
+                     ?? A.GetDesktop().FindAllChildren(Cf.ByProcessId(App.ProcessId)).Select(w => w.FindFirstDescendant(cond)).FirstOrDefault(e => e != null);
+            li?.Click(); return li;       // a collapsed list has no clickable point: throws, Until retries
+        }, 10, $"list item '{item}' of '{combo}'");
+        Wait.UntilInputIsProcessed();
+        UntilTrue(() => ComboText(cb) == item, 5, $"'{combo}' shows '{item}' (shows '{ComboText(cb)}')");
+        Log($"{combo} = {item}");
+    }
+
+    /// Type into the text box named `name`, replacing its text.
+    public void Type(AutomationElement within, string name, string text)
+    {
+        var e = Named(within, ControlType.Edit, name);
+        e.Focus(); Press(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A); Keyboard.Type(text); Wait.UntilInputIsProcessed();
+        if (Value(e) != text) throw new InvalidOperationException($"'{name}' holds '{Value(e)}', not '{text}'");
+    }
 
     public AutomationElement Button(AutomationElement within, string name) =>
         Until(() => within.FindFirstDescendant(Cf.ByControlType(ControlType.Button).And(Cf.ByName(name))), 10, $"button '{name}'");
@@ -155,10 +191,12 @@ public sealed class Robot : IDisposable
     }
 
     /// Ctrl+S, answering the Deck.Validate warning (title "Save") with OK if it appears; waits for the file to be rewritten.
-    public void SaveDeck(string path)
+    /// saveAs: the deck has no path yet (File > New), so Ctrl+S opens the "Save As" dialog, answered with `path`.
+    public void SaveDeck(string path, bool saveAs = false)
     {
         var t0 = File.GetLastWriteTimeUtc(path);
         Main.SetForeground(); Press(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_S);
+        if (saveAs) FileDialog("Save As", path);
         UntilTrue(() =>
         {
             if (Dialog("Save") is { } w) { Shot("save-validate-warning"); Log("Save warning: " + DialogText(w)); Click(Button(w, "OK")); }

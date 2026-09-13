@@ -65,6 +65,15 @@ public static class SolverJob
         return copied;
     }
 
+    /// True when the .aou ends with the solver's closing timing block ("The run ended at" then "Elapsed CPU time"),
+    /// which it writes only after the simulation finished (src/date_time.for:168,179); a run that stopped on bad input
+    /// leaves the .aou without it.
+    public static bool AouEndedNormally(string aouText)
+    {
+        int i = aouText.LastIndexOf("The run ended at", StringComparison.Ordinal);
+        return i >= 0 && aouText.IndexOf("Elapsed CPU time", i, StringComparison.Ordinal) > i;
+    }
+
     // A killed solver can hold its files for a moment after exit; retry briefly.
     static void DeleteDir(string dir)
     {
