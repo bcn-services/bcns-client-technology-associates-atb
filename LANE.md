@@ -189,7 +189,7 @@ Context: `README.md` (solver, verification), `docs/TIER2-SCOPE.md` (feature list
     - Inserting a segment before one referenced by D.4, F.2.B, F.6 or F.9 shifts those refs, and deleting a D.6 Type 5 constraint removes exactly one line (unit tests on client decks; where no client deck carries a card, build the case from the schema and say so)
     - Existing passing tests remain passing
   caution: true
-  status: not started
+  status: done
 
 - task: Validate the deck before Save and Run — `MainForm` calls `Deck.Validate()` before writing or
     running, and when it reports problems shows a warning listing each label, line number and reason,
