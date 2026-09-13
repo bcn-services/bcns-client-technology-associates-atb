@@ -20,3 +20,7 @@ Renumber follows ATB 3I `ATB3I.Util/ATBUpdate.cs` except where 3I leaves a refer
 - **F.2.B BeltID is not compacted**: 3I's `resetRID: "BeltID"` (`ATBUpdate.cs:237`) would renumber belts after a cascade delete, but the solver stops unless NJ = belt ordinal (`input_belt_force.for:109`). Other `resetRID` columns (RID, ActuatorID) are row order, which the deck keeps anyway.
 - **Not deck tokens**: D4aD4f/F6 `AirbagID` (D.4.a has no id, `FileManager.cs:1493`; F.6 writes the ordinal, `FileManager.cs:1778`) and F9m `Output SeqID` are 3I database keys; nothing in the .LIN to mark.
 - **D.6 is one line per constraint** for every Type (`input_contraints.for:29-30`).
+
+## Body structure
+- **Body boundaries are NULL joints**: a body starts at segment 1 and at J+1 for each joint J with Seg JNT 0 (`src/Chain.for:38-43`); NJNT = NSEG-1 with no flexible bodies; G.2 has one row per reference segment (`src/input_linear.for:66-70`). Used by GebodMerge.BodyStarts.
+- **Merged rows carry their own numbering**: an imported body's body-relative refs (GEBOD Seg JNT) are mapped to deck numbers when its rows are built; every ref already in the deck moves only through Renumber.Insert/Delete.
