@@ -242,11 +242,34 @@ public sealed class MainForm : Form
     /// Asks before deleting an entity that other cards still refer to, listing each referencing line.
     bool ConfirmDelete(Entity e, int n, IReadOnlyList<RefSite> refs)
     {
-        var lines = refs.GroupBy(r => (r.Line, r.Label)).Select(g => $"line {g.Key.Line}  {g.Key.Label}: {string.Join(", ", g.Select(r => r.Field))}").ToList();
-        var text = $"{e} {n} is still referenced by {lines.Count} line(s):\n\n" + string.Join("\n", lines.Take(25))
-                 + (lines.Count > 25 ? $"\n... and {lines.Count - 25} more" : "")
+        var (count, list) = RefList(refs);
+        var text = $"{e} {n} is still referenced by {count} line(s):\n\n" + list
                  + "\n\nDelete it anyway? As in ATB 3I, contact/constraint/force rows that depend on it are deleted and other references are cleared.";
         return MessageBox.Show(this, text, $"Delete {e.ToString().ToLowerInvariant()}", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes;
+    }
+
+    /// Referencing lines, one per line with its fields, first 25 shown.
+    static (int Count, string Text) RefList(IReadOnlyList<RefSite> refs)
+    {
+        var lines = refs.GroupBy(r => (r.Line, r.Label)).Select(g => $"line {g.Key.Line}  {g.Key.Label}: {string.Join(", ", g.Select(r => r.Field))}").ToList();
+        return (lines.Count, string.Join("\n", lines.Take(25)) + (lines.Count > 25 ? $"\n... and {lines.Count - 25} more" : ""));
+    }
+
+    bool ConfirmReplace(IReadOnlyList<RefSite> refs)
+    {
+        var (count, list) = RefList(refs);
+        var text = GebodForm.ReplaceText + "\n\n" + (count == 0 ? "No other card refers to this body." : $"These {count} line(s) lose their reference to the body:\n\n" + list);
+        return MessageBox.Show(this, text, "GEBOD", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes;
+    }
+
+    /// A GEBOD run that could not be merged: offer to keep its output so the user need not rerun GEBOD.
+    void OfferSaveAin(string ain, string why)
+    {
+        if (MessageBox.Show(this, why + "\n\nSave the GEBOD output (GEBOD.ain) so it is not lost?", "GEBOD", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        using var s = new SaveFileDialog { Filter = "ATB fixed-format input (*.ain)|*.ain", FileName = "GEBOD.ain", Title = "Save GEBOD output" };
+        if (s.ShowDialog(this) != DialogResult.OK) return;
+        try { File.WriteAllText(s.FileName, ain); status.Text = "GEBOD output saved to " + s.FileName; }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "GEBOD", MessageBoxButtons.OK, MessageBoxIcon.Error); }
     }
 
     void CopyRows()
@@ -421,11 +444,12 @@ public sealed class MainForm : Form
     {
         if (running) return;
         var target = deck ?? GebodMerge.NewDeck();
-        using var f = new GebodForm(GebodMerge.BodyStarts(target).Count);
+        int bodies = GebodMerge.BodyStarts(target).Count;
+        using var f = new GebodForm(bodies);
         if (f.ShowDialog(this) != DialogResult.OK || f.Request == null) return;
         var place = f.Placement;
-        if (place.Mode == GebodMode.Replace &&
-            MessageBox.Show(this, GebodForm.ReplaceText, "GEBOD", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        IReadOnlyList<RefSite> replaced = [];
+        if (place.Mode == GebodMode.Replace && !ConfirmReplace(replaced = GebodMerge.ReplacedReferences(target, place.Body))) return;
         var req = f.Request; var dims = f.BodyDims; string? ain = null;
         var exe = Path.Combine(AppContext.BaseDirectory, "Gebodv.exe");
         var work = Path.Combine(SolverRun.ShortWorkRoot(), "gebod");
@@ -466,9 +490,14 @@ public sealed class MainForm : Form
         try { Directory.Delete(work, true); } catch { }
         if (r.Error == "cancelled") { status.Text = "GEBOD cancelled."; return; }
         if (!r.Success) { MessageBox.Show(this, $"GEBOD failed (exit {r.ExitCode}): {r.Error}\n\n{sr.LogText}", "GEBOD", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        // The grid stayed editable during the run: the placement chosen against `bodies` bodies may no longer mean the same body.
+        if (GebodMerge.BodyStarts(target).Count is var now && now != bodies)
+        { OfferSaveAin(ain!, $"The deck had {bodies} bodies when GEBOD started and has {now} now, so the chosen placement is out of date. The deck is unchanged."); return; }
         Deck merged;
-        try { merged = GebodMerge.Merge(target, ain!, place); }   // works on a copy: a failure leaves the open deck as it was
-        catch (Exception ex) { MessageBox.Show(this, "GEBOD output could not be merged: " + ex.Message, "GEBOD", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        // Works on a copy: a failure leaves the open deck as it was. Asks again only if the references changed during the run.
+        try { merged = GebodMerge.Merge(target, ain!, place, sites => sites.SequenceEqual(replaced) || ConfirmReplace(sites)); }
+        catch (OperationCanceledException) { OfferSaveAin(ain!, "Replace cancelled. The deck is unchanged."); return; }
+        catch (Exception ex) { OfferSaveAin(ain!, "GEBOD output could not be merged: " + ex.Message); return; }
         if (deck == null) deckPath = null;
         deck = merged; dirty = true;
         ShowDeck();

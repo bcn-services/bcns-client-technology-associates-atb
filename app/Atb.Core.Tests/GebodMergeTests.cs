@@ -52,7 +52,7 @@ public class GebodMergeTests
     {
         var src = D2479();
         var before = src.Write();
-        var d = GebodMerge.Merge(src, Ain, new(GebodMode.Add));
+        var d = GebodMerge.Merge(src, Ain, new(GebodMode.Add), _ => true);
         Assert.Equal(before, src.Write());                                 // the open deck is untouched
 
         Assert.Equal("32 31 \"\" 0", Toks(d.Card("B.1")!));                // 17+15 segments; 16 + NULL + 14 joints
@@ -118,7 +118,7 @@ public class GebodMergeTests
     public void InsertBeforeBody1_ShiftsEveryExistingSegmentAndJointRef()
     {
         var o = D2479();
-        var d = GebodMerge.Merge(o, Ain, new(GebodMode.InsertBefore, 1));
+        var d = GebodMerge.Merge(o, Ain, new(GebodMode.InsertBefore, 1), _ => true);
         Assert.Equal("32 31 \"\" 0", Toks(d.Card("B.1")!));
         Assert.Equal([1, 16, 18], AssertSolverShape(d));
         Assert.Equal(LtB2a, Row(d, "B.2.A", 1).Raw);
@@ -131,13 +131,17 @@ public class GebodMergeTests
         // spot checks written out: old H.6 "2 19 1 1 2" (vehicle 19, segments 1, 2) and old G.3.a 3 Ref Segment 1
         Assert.Equal("2 34 16 16 17", Toks(d.Card("H.6")!));
         Assert.Equal("16", Row(d, "G.3.A", 18).Tokens[9]);
+        // Written out, not from CardSchema marks: 2479 F.1.b line 209 "1 19 1 50 ..." (plane 1, vehicle segment 19, contact
+        // segment 1, ellipsoid 50) and H.2.a line 319 "2 19 3 ..." (vehicle 19, segment 3). Every segment and ellipsoid +15.
+        Assert.Equal("1 34 16 65 1 0 1 3 1 -1 0", Toks(d.Cards("F.1.B").First()));
+        Assert.Equal("2 34 18 0 0 0 0", Toks(d.Card("H.2.A")!));
     }
 
     [Fact]
     public void ReplaceBody1_RemovesItsSegmentsAndJointsThenInserts()
     {
         var o = D2479();
-        var d = GebodMerge.Merge(o, Ain, new(GebodMode.Replace, 1));
+        var d = GebodMerge.Merge(o, Ain, new(GebodMode.Replace, 1), _ => true);
         Assert.Equal("30 29 \"\" 0", Toks(d.Card("B.1")!));                // 17-2+15 segments; 16-2+14+1 joints
         Assert.Equal([1, 16], AssertSolverShape(d));
         Assert.DoesNotContain(d.Cards("B.2.A"), l => l.Str(0) is "RN" or "DR");
@@ -151,6 +155,39 @@ public class GebodMergeTests
             Assert.Equal(a.Str(0), b.Str(0));
             Assert.Equal(a.Int(1) + 13, b.Int(1));
         }
+        // Written out: 2479 F.1.b line 217 "2 19 3 3 ..." and H.2.a "2 19 3 ...": segments 3.. move by 15 - 2 and the
+        // vehicle segment 19 (NSEG + 2) becomes 32. F.1.b rows on segments 1-2 (line 209 "1 19 1 50 ...") are gone.
+        Assert.Contains("2 32 16 16 10 0 11 3 12 -2 0", d.Cards("F.1.B").Select(Toks));
+        Assert.DoesNotContain(d.Cards("F.1.B"), l => l.Tokens[0] == "1" && l.Tokens[2] is "1" or "2");
+        Assert.Equal("2 32 16 0 0 0 0", Toks(d.Card("H.2.A")!));
+    }
+
+    [Fact]
+    public void ReplaceBody1_ConfirmSeesTheRemovedReferences_AndDeclineChangesNothing()
+    {
+        var src = D2479();
+        var before = src.Write();
+        IReadOnlyList<RefSite>? seen = null;
+        Assert.Throws<OperationCanceledException>(() => GebodMerge.Merge(src, Ain, new(GebodMode.Replace, 1), s => { seen = s; return false; }));
+        Assert.Equal(before, src.Write());
+        Assert.NotNull(seen);
+        Assert.Equal(GebodMerge.ReplacedReferences(src, 1), seen);
+        // 2479 line 209, F.1.b "1 19 1 50 ...": its Contact Segment is segment 1 of the replaced body; H.6 line 325 names segments 1, 2.
+        Assert.Contains(seen, s => s.Line == 209 && s.Field == "Contact Segment");
+        Assert.Contains(seen, s => s.Line == 325);
+        Assert.DoesNotContain(seen, s => s.Label.Contains("B.", StringComparison.OrdinalIgnoreCase));   // the body's own lines are not "references"
+
+        IReadOnlyList<RefSite>? accepted = null;
+        var d = GebodMerge.Merge(src, Ain, new(GebodMode.Replace, 1), s => { accepted = s; return true; });
+        Assert.Equal(seen, accepted);
+        Assert.Equal("30 29 \"\" 0", Toks(d.Card("B.1")!));
+        Assert.Equal(before, src.Write());
+    }
+
+    [Fact]
+    public void EveryCardInTheSchema_HasAGrammarRank()
+    {
+        foreach (var card in CardSchema.Cards.Keys) Assert.True(Renumber.Rank(card) >= 0, $"{card} is missing from Renumber.Order");
     }
 
     [Fact]
@@ -161,9 +198,9 @@ public class GebodMergeTests
         Labeler.Label(n);
         Assert.Empty(GebodMerge.BodyStarts(n));
         Assert.Equal("0 0 \"No Data\" 0", Toks(n.Card("B.1")!));
-        Assert.Equal("\"IN.\" \"LB.\" \"SEC.\" 0 0 386.088 0", Toks(n.Card("A.3")!));
+        Assert.Equal("\"IN.\" \"LB.\" \"SEC.\" 0 0 386.088 386.088", Toks(n.Card("A.3")!));
 
-        var d = GebodMerge.Merge(n, Ain, new(GebodMode.Add));
+        var d = GebodMerge.Merge(n, Ain, new(GebodMode.Add), _ => true);
         Assert.Equal("15 14 \"No Data\" 0", Toks(d.Card("B.1")!));         // first body: 14 joints, no NULL joint
         Assert.Equal([1], AssertSolverShape(d));
         Assert.Equal(LtB2a, Row(d, "B.2.A", 1).Raw);
@@ -180,7 +217,7 @@ public class GebodMergeTests
     [InlineData(GebodMode.Replace, 2, new[] { 1, 3 })]
     public void OtherPlacements_KeepTheSolverShape(GebodMode mode, int body, int[] starts)
     {
-        var d = GebodMerge.Merge(D2479(), Ain, new(mode, body));
+        var d = GebodMerge.Merge(D2479(), Ain, new(mode, body), _ => true);
         Assert.Equal(starts, AssertSolverShape(d));
     }
 
@@ -188,7 +225,7 @@ public class GebodMergeTests
     public void InsertBeforeBody2_PutsTheBodyBetween()
     {
         var o = D2479();
-        var d = GebodMerge.Merge(o, Ain, new(GebodMode.InsertBefore, 2));
+        var d = GebodMerge.Merge(o, Ain, new(GebodMode.InsertBefore, 2), _ => true);
         Assert.Equal(LtB2a, Row(d, "B.2.A", 3).Raw);
         Assert.Equal(PB3a(3), Row(d, "B.3.A", 3).Raw);
         Assert.Equal("\"NULL\" 0 0 0 0 0 0 0 0 0 0 0", Toks(Row(d, "B.3.A", 2)));
@@ -199,8 +236,8 @@ public class GebodMergeTests
     [Fact]
     public void BadInput_Throws()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => GebodMerge.Merge(D2479(), Ain, new(GebodMode.Replace, 3)));
-        Assert.Throws<ArgumentOutOfRangeException>(() => GebodMerge.Merge(GebodMerge.NewDeck(), Ain, new(GebodMode.InsertBefore, 1)));
-        Assert.Throws<FormatException>(() => GebodMerge.Merge(D2479(), string.Join("\n", Ain.Split('\n').Take(40)), new(GebodMode.Add)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => GebodMerge.Merge(D2479(), Ain, new(GebodMode.Replace, 3), _ => true));
+        Assert.Throws<ArgumentOutOfRangeException>(() => GebodMerge.Merge(GebodMerge.NewDeck(), Ain, new(GebodMode.InsertBefore, 1), _ => true));
+        Assert.Throws<FormatException>(() => GebodMerge.Merge(D2479(), string.Join("\n", Ain.Split('\n').Take(40)), new(GebodMode.Add), _ => true));
     }
 }

@@ -13,14 +13,14 @@ public class GebodMergeQaTests
 
     static IEnumerable<(string Name, Deck Deck)> Merged()
     {
-        yield return ("add", GebodMerge.Merge(D2479(), Ain, new(GebodMode.Add)));
-        yield return ("before1", GebodMerge.Merge(D2479(), Ain, new(GebodMode.InsertBefore, 1)));
-        yield return ("before2", GebodMerge.Merge(D2479(), Ain, new(GebodMode.InsertBefore, 2)));
-        yield return ("after1", GebodMerge.Merge(D2479(), Ain, new(GebodMode.InsertAfter, 1)));
-        yield return ("after2", GebodMerge.Merge(D2479(), Ain, new(GebodMode.InsertAfter, 2)));
-        yield return ("replace1", GebodMerge.Merge(D2479(), Ain, new(GebodMode.Replace, 1)));
-        yield return ("replace2", GebodMerge.Merge(D2479(), Ain, new(GebodMode.Replace, 2)));
-        yield return ("newadd", GebodMerge.Merge(GebodMerge.NewDeck(), Ain, new(GebodMode.Add)));
+        yield return ("add", GebodMerge.Merge(D2479(), Ain, new(GebodMode.Add), _ => true));
+        yield return ("before1", GebodMerge.Merge(D2479(), Ain, new(GebodMode.InsertBefore, 1), _ => true));
+        yield return ("before2", GebodMerge.Merge(D2479(), Ain, new(GebodMode.InsertBefore, 2), _ => true));
+        yield return ("after1", GebodMerge.Merge(D2479(), Ain, new(GebodMode.InsertAfter, 1), _ => true));
+        yield return ("after2", GebodMerge.Merge(D2479(), Ain, new(GebodMode.InsertAfter, 2), _ => true));
+        yield return ("replace1", GebodMerge.Merge(D2479(), Ain, new(GebodMode.Replace, 1), _ => true));
+        yield return ("replace2", GebodMerge.Merge(D2479(), Ain, new(GebodMode.Replace, 2), _ => true));
+        yield return ("newadd", GebodMerge.Merge(GebodMerge.NewDeck(), Ain, new(GebodMode.Add), _ => true));
     }
 
     [Fact]
@@ -39,8 +39,8 @@ public class GebodMergeQaTests
     public void InsertAfter_MatchesEquivalentPlacements()
     {
         var o = D2479();
-        Assert.Equal(GebodMerge.Merge(o, Ain, new(GebodMode.Add)).Write(), GebodMerge.Merge(o, Ain, new(GebodMode.InsertAfter, 2)).Write());
-        Assert.Equal(GebodMerge.Merge(o, Ain, new(GebodMode.InsertBefore, 2)).Write(), GebodMerge.Merge(o, Ain, new(GebodMode.InsertAfter, 1)).Write());
+        Assert.Equal(GebodMerge.Merge(o, Ain, new(GebodMode.Add), _ => true).Write(), GebodMerge.Merge(o, Ain, new(GebodMode.InsertAfter, 2), _ => true).Write());
+        Assert.Equal(GebodMerge.Merge(o, Ain, new(GebodMode.InsertBefore, 2), _ => true).Write(), GebodMerge.Merge(o, Ain, new(GebodMode.InsertAfter, 1), _ => true).Write());
     }
 
     /// Every segment/joint ref in every card family of 2479 is compared against the same ref in the merged deck
@@ -53,7 +53,7 @@ public class GebodMergeQaTests
     public void EveryFamilyRef_StillNamesTheSameEntity(GebodMode mode, int body)
     {
         var o = D2479();
-        var d = GebodMerge.Merge(o, Ain, new(mode, body));
+        var d = GebodMerge.Merge(o, Ain, new(mode, body), _ => true);
         Labeler.Label(o); Labeler.Label(d);
         var oSeg = o.Cards("B.2.A").Select(l => l.Raw).ToList();
         var dSeg = d.Cards("B.2.A").Select(l => l.Raw).ToList();

@@ -305,7 +305,7 @@ public static class Renumber
     /// The number references use: a vehicle's segment number follows the body segments (src/input_vehicle.for NVEH).
     static int Number(Deck d, Entity e, int n) => e == Entity.Vehicle ? d.SegmentCount + n : n;
 
-    static List<List<DeckLine>> Owned(Deck d, Entity e, int n)
+    internal static List<List<DeckLine>> Owned(Deck d, Entity e, int n)
     {
         if (e == Entity.Vehicle)
         {
@@ -334,7 +334,7 @@ public static class Renumber
         "H.4", "H.5", "H.6", "H.7", "H.8", "H.9", "H.10.A", "H.10.B", "H.10.C", "H.11", "H.12.A", "H.12.B",
     ];
 
-    static int Rank(string card)
+    internal static int Rank(string card)
     {
         int i = Array.IndexOf(Order, card.ToUpperInvariant());
         return i >= 0 ? i : card.StartsWith("F.9.", StringComparison.OrdinalIgnoreCase) ? Array.IndexOf(Order, "F.9") : -1;

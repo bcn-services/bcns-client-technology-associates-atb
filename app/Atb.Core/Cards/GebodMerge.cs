@@ -34,7 +34,33 @@ public static class GebodMerge
         return starts;
     }
 
-    public static Deck Merge(Deck deck, string ainText, GebodPlacement p)
+    /// Replace body k: segments a..b and the joints into them, j0..j1 (its own NULL joint a-1 and joints a..b-1). Body 1
+    /// has no NULL joint, so the next body's (joint b) goes instead, or segment b+1 would hang off joint 1. Same deck
+    /// ATB 3I DeleteBody leaves.
+    static (int A, int B, int J0, int J1) ReplaceRange(Deck d, int k)
+    {
+        var starts = BodyStarts(d);
+        int nb = starts.Count, nseg = Renumber.Count(d, Entity.Segment), njnt = Renumber.Count(d, Entity.Joint);
+        if (k < 1 || k > nb) throw new ArgumentOutOfRangeException(nameof(k), $"Body {k} is outside 1..{nb}.");
+        int a = starts[k - 1], b = k < nb ? starts[k] - 1 : nseg;
+        return (a, b, a > 1 ? a - 1 : 1, a > 1 ? b - 1 : Math.Min(b, njnt));
+    }
+
+    /// Every field outside body k that Replace removes, because it refers to one of the body's segments or joints
+    /// (Renumber.Delete cascades or blanks them). They are not retargeted onto the new body.
+    // ponytail: ATB 3I remaps these onto the new body instead of dropping them — open human decision; upgrade when it is made.
+    public static List<RefSite> ReplacedReferences(Deck d, int body)
+    {
+        var (a, b, j0, j1) = ReplaceRange(d, body);
+        var items = Enumerable.Range(j0, j1 - j0 + 1).Select(j => (Entity.Joint, j)).Concat(Enumerable.Range(a, b - a + 1).Select(s => (Entity.Segment, s))).ToList();
+        var own = items.SelectMany(x => Renumber.Owned(d, x.Item1, x.Item2).SelectMany(g => g)).ToHashSet();
+        return items.SelectMany(x => Renumber.References(d, x.Item1, x.Item2))
+            .Where(s => !own.Contains(d.Lines[s.Line - 1])).Distinct().OrderBy(s => s.Line).ToList();
+    }
+
+    /// confirm is asked once, for Replace only, with ReplacedReferences when there are any; false throws
+    /// OperationCanceledException and nothing changes.
+    public static Deck Merge(Deck deck, string ainText, GebodPlacement p, Func<IReadOnlyList<RefSite>, bool> confirm)
     {
         var (segs, jnts) = ParseAin(ainText);
         var d = Deck.Parse(deck.Write());
@@ -56,11 +82,10 @@ public static class GebodMerge
             case GebodMode.InsertBefore: s0 = starts[k - 1]; break;
             case GebodMode.InsertAfter: s0 = k < nb ? starts[k] : nseg + 1; break;
             default:
-                // Body k is segments a..b and the joints into them: its own NULL joint a-1 and joints a..b-1. Body 1 has no NULL
-                // joint, so the next body's (joint b) goes instead, or segment b+1 would hang off joint 1. Same deck ATB 3I DeleteBody leaves.
-                int a = starts[k - 1], b = k < nb ? starts[k] - 1 : nseg;
-                int j0 = a > 1 ? a - 1 : 1, j1 = a > 1 ? b - 1 : Math.Min(b, njnt);
-                for (int j = j1; j >= j0; j--) Renumber.Delete(d, Entity.Joint, j, _ => true);   // the UI asked once, up front
+                var (a, b, j0, j1) = ReplaceRange(d, k);
+                var sites = ReplacedReferences(d, k);
+                if (sites.Count > 0 && !confirm(sites)) throw new OperationCanceledException("Replace declined; the deck is unchanged.");
+                for (int j = j1; j >= j0; j--) Renumber.Delete(d, Entity.Joint, j, _ => true);   // confirmed above, as one list
                 for (int s = b; s >= a; s--) Renumber.Delete(d, Entity.Segment, s, _ => true);
                 s0 = a; newBody = false;
                 break;
@@ -105,8 +130,8 @@ public static class GebodMerge
         var d = new Deck();
         void Add(string key, params string[] t) => d.Lines.Add(Line(key, t));
         Add("A.1.A", "\"01-01-2004\""); Add("A.1.B", "\"New Simulation\""); Add("A.1.C", "\"New Simulation\"");
-        // ponytail: G (the g-unit scale) is 0 — CreateEmptyFile leaves it unset; users set it on Run Control (2479 uses 386.088).
-        Add("A.3", "\"IN.\"", "\"LB.\"", "\"SEC.\"", "0", "0", "386.088", "0");
+        // G = 386.088 (as 2479), not CreateEmptyFile's unset 0: the solver divides by G (Inrtia.for:122, Print.for:122, output_body_prop.for:57).
+        Add("A.3", "\"IN.\"", "\"LB.\"", "\"SEC.\"", "0", "0", "386.088", "386.088");
         Add("A.4", "4", "0", "0.002", "0.0005", "0.001", "6.25E-05");
         Add("A.5", [.. Zeros(35), "1"]);
         Add("B.1", "0", "0", "\"No Data\"", "0");
