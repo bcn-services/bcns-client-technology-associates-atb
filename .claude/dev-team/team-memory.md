@@ -55,3 +55,10 @@
 - **What worked:** The solver still runs on the input's own base (Convert names the .lin after its input), so Finish does the rename. Mutations: gate flip → 6 red, incl. Finish_FailedRun_KeepsPreviousOutputsByteIdentical; ignoring destDir → 3 red, incl. Finish_CopiesToChosenDirAndBase_NotDeckDir.
 - **What failed:** none
 - **Remember next run:** The GEBOD follow-up Convert (MainForm ~403) goes through RunSolver, so it now shows the Save dialog too. RunDeck still auto-saves a dirty deck to its own path before Run (the deck itself, not solver output).
+
+## 2026-09-12 17:47 — dev-team-auto — Round 1b renumbering gaps
+- **Outcome:** DONE — 4 attempts — caution: yes — team: dt-engineer opus/high then xhigh x3, dt-qa opus/high x4, dt-review opus/high x4 — r1b-run-overwrite, commit 7a52820
+- **What happened:** Paste routes through Renumber.Paste→Insert per row; H.11 actuator kind (abs compare, drop, Count, H.11 line removed at NRTORQ 0); F.2.B/F.6/F.9 marks; D.6 Type 5 one line (Renumber + Labeler). Review fixes: Validate flags H.11 Count 0 with NRTORQ>0 (STOP 741) and zeroed F.9 refs; MainForm Run now blocks on Validate, Save asks "Save anyway?"; paste rejects joint rows whose spin block (B.3.A type, B.4/B.5 lines) doesn't match the template, all-or-none.
+- **What worked:** delta QA + delta review after every fix pass; QA writing failing tests for the review's finding before the fix.
+- **What failed:** spin-class paste check took 3 passes (B.3.A only → B.4/B.5 presence only → half-filled B.5 block). Should have asked for all-or-none on every joint screen in one pass.
+- **Remember next run:** D.4 carries no segment ref (ATBUpdate.cs:227 updates AirbagID, never written to .LIN; input_airbags.for:98-105) — the done-when's "D.4 refs shift" is tested as "D.4 untouched"; human decision. Save/Run never called Deck.Validate before this item. Open: Run has no override (a solver-acceptable deck failing a per-card check can't run); half-filled B.5 row gets the wrong-Joint-Type message; hand-built rows with repeated cards bypass the spin check; Labeler still throws on NBLT/NBAG/NWATER>0.
