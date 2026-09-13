@@ -99,6 +99,15 @@ public sealed class Deck
             var reason = global::Atb.Core.Cards.CardSchema.Cards.TryGetValue(l.Card, out var spec)
                 ? spec.Check(l.Tokens) : "no schema entry for this card";
             if (reason != null) issues.Add(new DeckIssue(i + 1, l.Card, reason));
+            // Cross-card reads the solver does not guard (STANDARDS.md "Delete outcome matches the solver's read").
+            if (l.Is("H.11") && l.Count > 0 && int.TryParse(l.Tokens[0], out var ksg) && ksg < 1
+                && Card("D.1.B") is { Count: > 0 } b && int.TryParse(b.Tokens[0], out var nrtorq) && nrtorq > 0)
+                issues.Add(new DeckIssue(i + 1, l.Card, "Count must be at least 1 while D.1.b has actuators (solver STOP 741, input_h11_cards.for:36-41)"));
+            // F.9 segment/ellipsoid refs index SEG()/DELP()/BUOY() with no range check (water_force.for:73,110,117,128, output_water.for:84).
+            if (l.Card.StartsWith("F.9.", StringComparison.Ordinal))
+                for (int t = 0, skip = CardSchema.Skip(l.Card, l.Count); t < l.Count; t++)
+                    if (CardSchema.KindOf(l.Card, t + skip) is Kind.SegRef or Kind.EllipRef && l.Tokens[t] == "0")
+                        issues.Add(new DeckIssue(i + 1, l.Card, $"{CardSchema.Header(l.Card, t + skip)} is 0; the solver needs a real segment/ellipsoid"));
         }
         return issues;
     }

@@ -178,7 +178,83 @@ public class RenumberGapTests
         Assert.Equal(["1 0 0 3 0"], All(deck, "F.9.I"));
         Assert.Equal(["0 0 0 0 0 0 3"], All(deck, "F.9.J1"));
         Assert.Equal(["52"], All(deck, "F.9.M"));
+        // The zeroed refs would index SEG(0) (water_force.for:73,110,117,128), so Validate blocks Save/Run.
+        Assert.Equal(["F.9.F Contact SegID", "F.9.G Mouth SegID", "F.9.I Ref SegID", "F.9.J1 PFD SegID"],
+            deck.Validate().Select(i => i.Label + " " + i.Reason.Split(" is 0")[0]));
+    }
+
+    [Fact]
+    public void DeleteSegment3_ZeroedF9EllipRef_ValidateFlags()
+    {
+        var deck = Spliced(new() { [297] = ["3    CARD F.9.m"] });
         Assert.Empty(deck.Validate());
+
+        Assert.NotNull(Renumber.Delete(deck, Entity.Segment, 3, _ => true));
+
+        Assert.Equal(["0"], All(deck, "F.9.M"));
+        var issue = Assert.Single(deck.Validate());
+        Assert.Equal("F.9.M", issue.Label);
+        Assert.Equal("EllipID is 0; the solver needs a real segment/ellipsoid", issue.Reason);
+    }
+
+    // --- review: H.11 emptied while actuators remain (input_h11_cards.for:36-41 STOP 741) ---
+
+    [Fact]
+    public void DeleteActuator2_WhenH11ListsOnlyIt_ConfirmWarns_ValidateFlags()
+    {
+        var deck = ActuatorDeck(3, ThreeActuators, "1    2");
+        Assert.Empty(deck.Validate());
+        IReadOnlyList<RefSite>? seen = null;
+
+        Assert.NotNull(Renumber.Delete(deck, Entity.Actuator, 2, r => { seen = r; return true; }));
+
+        Assert.Contains(seen!, s => s.Label == "H.11" && s.Field.Contains("STOP 741"));
+        Assert.Equal(["0"], All(deck, "H.11"));
+        Assert.Equal(["2"], All(deck, "D.1.B"));
+        var issue = Assert.Single(deck.Validate(), i => i.Label == "H.11");
+        Assert.Contains("STOP 741", issue.Reason);
+    }
+
+    [Fact]
+    public void DeleteJoint5_CascadedActuatorEmptiesH11_ConfirmWarns_CancelLeavesDeck()
+    {
+        var deck = ActuatorDeck(3, ThreeActuators, "1    1");
+        var before = deck.Write();
+        IReadOnlyList<RefSite>? seen = null;
+
+        Assert.Null(Renumber.Delete(deck, Entity.Joint, 5, r => { seen = r; return false; }));
+
+        Assert.Contains(seen!, s => s.Label == "H.11" && s.Field.Contains("STOP 741"));
+        Assert.Equal(before, deck.Write());
+    }
+
+    [Fact]
+    public void DeleteActuator2_H11KeepsAnotherEntry_NoWarning()
+    {
+        var deck = ActuatorDeck(3, ThreeActuators, "2    1    2");
+        IReadOnlyList<RefSite>? seen = null;
+
+        Assert.NotNull(Renumber.Delete(deck, Entity.Actuator, 2, r => { seen = r; return true; }));
+
+        Assert.DoesNotContain(seen!, s => s.Field.Contains("STOP 741"));
+        Assert.Empty(deck.Validate());
+    }
+
+    // --- review: joint paste keeps the template's spin class (Labeler.cs:61,66) ---
+
+    [Fact]
+    public void PasteSpinJointRow_OnNonSpinTemplate_IsRejected_DeckUnchanged()
+    {
+        var deck = Deck.Load(Fixture);
+        var before = deck.Write();
+        var cards = new[] { "B.3.A", "B.3.B", "B.3.C" };
+        // Joint Type 4 -> JointType "304": a spin joint; template joint 2 ("NULL") has Joint Type 0.
+        const string text = "PX\t3\t4\t-2.835566\t0\t-1.744625\t-3.676071\t0\t2.067626\t0\t0\t0\t0\t0\t0\t0\t5\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\r\n";
+        var res = Deck.ParsePaste(text, cards);
+        Assert.Single(res.Rows);
+
+        Assert.Equal(["row 1: Joint Type needs different B.4/B.5 lines than joint 2"], Renumber.Paste(deck, Entity.Joint, cards, 3, 2, res.Rows));
+        Assert.Equal(before, deck.Write());
     }
 
     // --- (5) D.6 Type 5 ---

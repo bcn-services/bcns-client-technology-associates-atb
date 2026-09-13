@@ -250,8 +250,8 @@ public sealed class MainForm : Form
         if (deck != null && EntityOf(screen) is { } e)
         {
             var sel = SelectedIndexes();
-            if (sel.Length == 0) { status.Text = "Select the row to paste after (its copy fills the entity's other cards)."; return; }
-            if (res.Rows.Count > 0)
+            if (sel.Length == 0) status.Text = "Select the row to paste after (its copy fills the entity's other cards).";
+            else if (res.Rows.Count > 0)
             {
                 grid.EndEdit();
                 int n = sel[^1] + 1, at = e == Entity.Vehicle ? n : n + 1;   // as AddRow: a vehicle goes before the selected one
@@ -282,7 +282,20 @@ public sealed class MainForm : Form
     {
         if (deck == null) return;
         if (deckPath == null) { SaveAs(); return; }
-        grid.EndEdit(); deck.Save(deckPath); dirty = false; status.Text = $"Saved {deckPath}";
+        grid.EndEdit();
+        if (!DeckValid(ask: true)) return;
+        deck.Save(deckPath); dirty = false; status.Text = $"Saved {deckPath}";
+    }
+
+    /// Deck.Validate before the deck reaches the solver: Run stops on any issue; Save asks, so edits are never trapped unsaved.
+    bool DeckValid(bool ask)
+    {
+        var issues = deck!.Validate();
+        if (issues.Count == 0) return true;
+        var text = "The solver will reject or misread this deck:\n\n" + string.Join("\n", issues.Take(20).Select(i => $"line {i.Line}  {i.Label}: {i.Reason}"))
+                 + (issues.Count > 20 ? $"\n... and {issues.Count - 20} more" : "");
+        if (!ask) { MessageBox.Show(this, text, "Run ATB", MessageBoxButtons.OK, MessageBoxIcon.Warning); return false; }
+        return MessageBox.Show(this, text + "\n\nSave anyway?", "Save", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes;
     }
     void SaveAs()
     {
@@ -306,6 +319,8 @@ public sealed class MainForm : Form
     Task RunDeck()
     {
         if (deck == null || deckPath == null) { status.Text = "Open a deck first."; return Task.CompletedTask; }
+        grid.EndEdit();
+        if (!DeckValid(ask: false)) return Task.CompletedTask;
         if (dirty) Save();
         return RunSolver(SolverMode.RunLin, deckPath);
     }

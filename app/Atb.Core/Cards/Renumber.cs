@@ -118,26 +118,27 @@ public static class Renumber
         Check(d, e, n, insert: false);
         if (e == Entity.Vehicle && n == Count(d, e))
             throw new InvalidOperationException("The primary (last) vehicle cannot be deleted.");   // ATB 3I Vehicle.cs btnDelete
-        var refs = References(d, e, n);
-        if (refs.Count > 0 && !confirm(refs)) return null;
-
         int num = Number(d, e, n);
         var kinds = Kinds(e);
+        var cascade = Cascade(e);
+        var acts = cascade.ContainsKey("F.10")                        // F.10 positions the cascade removes
+            ? d.Cards("F.10").Select((l, i) => (l, i + 1)).Where(x => Marked(x.l, kinds).Any(i => Ref(x.l, i, x.l.Tokens[i]) == num)).Select(x => x.Item2).ToList()
+            : new List<int>();
+        var refs = References(d, e, n);
+        if (H11Emptied(d, e == Entity.Actuator ? [n] : acts) is { } warn) refs.Add(warn);
+        if (refs.Count > 0 && !confirm(refs)) return null;
+
         var data = new EntityData();
         data.Groups.AddRange(Owned(d, e, n));
         var gone = data.Groups.SelectMany(g => g).ToHashSet();
         var lists = new Dictionary<string, List<string>>();
         List<string>? List(string c) => lists.TryGetValue(c, out var v) ? v : ReadList(d, c) is { } r ? lists[c] = r : null;
 
-        var cascade = Cascade(e);
-        var acts = new List<int>();                                   // F.10 positions the cascade removes
-        for (int li = 0, f10 = 0; li < d.Lines.Count; li++)
+        for (int li = 0; li < d.Lines.Count; li++)
         {
             var l = d.Lines[li];
-            if (l.Is("F.10")) f10++;
             if (gone.Contains(l) || !cascade.TryGetValue(l.Card, out var cnt) || !Marked(l, kinds).Any(i => Ref(l, i, l.Tokens[i]) == num)) continue;
             gone.Add(l);
-            if (l.Is("F.10")) acts.Add(f10);
             if (cnt.Index >= 0) Bump(d, cnt.Card, cnt.Index, -1);
             else if (List(cnt.Card) is { } v && Num(l.Tokens[0]) is int s && s >= 1 && s <= v.Count && Num(v[s - 1]) is int c)
                 v[s - 1] = Str(c - 1);
@@ -160,6 +161,19 @@ public static class Renumber
             if (d.Card("D.1.B") is { Count: > 0 } b && Num(b.Tokens[0]) == 0) d.Lines.RemoveAll(l => l.Is("H.11"));
         BumpCount(d, e, -1);
         return data;
+    }
+
+    /// Confirm-list entry when removing actuators lost leaves H.11 with no entry while actuators remain: Unref writes
+    /// Count 0 and the solver stops (input_h11_cards.for:36-41 STOP 741); Deck.Validate flags the result.
+    static RefSite? H11Emptied(Deck d, List<int> lost)
+    {
+        int li = d.Lines.FindIndex(l => l.Is("H.11"));
+        if (li < 0 || lost.Count == 0 || d.Card("D.1.B") is not { Count: > 0 } b || Num(b.Tokens[0]) is not int nr || nr - lost.Count < 1) return null;
+        var h = d.Lines[li];
+        var idx = Marked(h, [Kind.ActRef]).ToList();
+        return idx.Count > 0 && idx.All(i => Ref(h, i, h.Tokens[i]) is int a && lost.Contains(a))
+            ? new(li + 1, "H.11", "Count becomes 0 while actuators remain: the solver stops (STOP 741) until an actuator is added back")
+            : null;
     }
 
     /// Clear or drop every marked ref to num (count-led lists lose the entry, others get the card's blank) and shift refs > num down.
@@ -229,7 +243,7 @@ public static class Renumber
     /// other groups are copies of entity template's. cards is the screen's group. Returns why rows were skipped.
     /// A vehicle row replaces the matching C.1 / C.2.A / C.2.B lines of a copy of the template's block, so it must keep the
     /// template's C.3/C.4/C.5 layout (Interpolated Points, Spline Data Type, Number of Data Points).
-    // ponytail: a pasted joint row whose Joint Type needs B.4.B/B.5.B/C the template lacks (or vice versa) is not checked.
+    /// A B.3.A row is rejected when its Joint Type's spin class differs from the template's, as a vehicle row's layout is.
     public static List<string> Paste(Deck d, Entity e, IReadOnlyList<string> cards, int at, int template, IEnumerable<IReadOnlyList<DeckLine>> rows)
     {
         Check(d, e, at, insert: true);
@@ -242,7 +256,13 @@ public static class Renumber
         {
             r++;
             var data = Copy(d, e, template);
-            if (e != Entity.Vehicle) { data.Groups[gi] = row.ToList(); datas.Add(data); continue; }
+            if (e != Entity.Vehicle)
+            {
+                // The copy keeps the template's B.4.B/B.5.B/B.5.C presence, which follows the spin class (Labeler.cs:61,66).
+                if (e == Entity.Joint && gi == 0 && Spin(row.First(l => l.Is("B.3.A"))) != Spin(data.Groups[0][0]))
+                { skipped.Add($"row {r}: Joint Type needs different B.4/B.5 lines than joint {template}"); continue; }
+                data.Groups[gi] = row.ToList(); datas.Add(data); continue;
+            }
             var block = data.Groups[0];
             string? why = null;
             foreach (var c in cards)
@@ -259,6 +279,8 @@ public static class Renumber
         for (int k = 0; k < datas.Count; k++) Insert(d, e, at + k, datas[k]);
         return skipped;
     }
+
+    static bool Spin(DeckLine b3a) => b3a.Count > 9 && Num(b3a.Tokens[2]) is int pin && Num(b3a.Tokens[9]) is int slip && Labeler.IsSpin(pin, slip);
 
     static string Layout(DeckLine l) => l.Card switch
     {

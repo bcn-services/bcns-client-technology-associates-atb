@@ -47,8 +47,7 @@ public static class Labeler
             for (int j = 0; j < nJnt; j++)
             {
                 var a = Take("B.3.A", 12);
-                var type = JointType(I(a, 2, "B.3.A"), I(a, 9, "B.3.A"));
-                spin[j] = type == "304" || (int.TryParse(type, out var t) && t is >= 104 and <= 110);
+                spin[j] = IsSpin(I(a, 2, "B.3.A"), I(a, 9, "B.3.A"));
                 if (I(a, 1, "B.3.A") == 0) num5++;
                 Take("B.3.B", 15);
                 // ponytail: B.3.C placement (after each B.3.B) unverified — no flexible-body deck in the corpus.
@@ -275,6 +274,10 @@ public static class Labeler
         : d2 > 0 ? [d1 < 0 ? 2 : 1, 1]
         : d1 > 0 ? [1, 2]
         : [0, 0];
+
+    /// A joint whose type carries B.4.B / B.5.B / B.5.C lines (Joint Type 304 or 104-110).
+    internal static bool IsSpin(int pin, int slip) =>
+        JointType(pin, slip) is var type && (type == "304" || (int.TryParse(type, out var t) && t is >= 104 and <= 110));
 
     /// ATB 3I FileManager.GetJointType(pin = B.3.A Joint Type, slip = IEULER), ported verbatim.
     static string JointType(int pin, int slip)
