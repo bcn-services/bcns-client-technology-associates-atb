@@ -4,10 +4,39 @@ LANE.md is the contract; this tracks where we are in it — if they disagree, LA
 
 ## Current position
 
-- **Status:** round 1 autonomous run finished — all 7 items before the stop marker are done, none blocked; 200 tests pass on macOS. None of the four lane goals is fully proven yet, because the app has not been run on Windows.
-- **Next:** Round 1b — full Windows end-to-end pass.
-- **Blockers:** Running the solver on a deck inside `cases/` overwrites that case's reference outputs, so copy the deck out first. A body made with GEBOD holds only the body cards and has to be merged into a full deck before it will run; Nate needs to say how. GEBOD also writes a settings file to the root of `C:\`, which a normal Windows user may not be allowed to do. The labeler item's done-when says three mislabelled `H.1.a` rows, but the client decks contain only one (`2479_2.LIN` line 321), which is fixed. Nate should amend that line in LANE.md to say one. The viewer keeps ATB 3I's screen axes, where the solver's +Z points down on screen; Nate should confirm that is what "Z up on screen" meant.
+- **Status:** Round 1b finished — all 6 items done, none blocked; 262 tests pass on macOS, and the Windows robot passes every scenario on GitHub's Windows machines (run 34735611144, 165 screenshots checked).
+- **Lane acceptance (2026-09-12, `.claude/dev-team/lane-acceptance-report-r1b.md`):**
+  - Goal 1, open → edit → save: met.
+  - Goal 2, the app's Run matches the reference outputs: partly met. The app's run matches a direct solver run exactly, but the outputs drift from the reference files after about 0.4 s, and `cmp.py` never fails, so this goal can't fail as written.
+  - Goal 3, the viewer plays every `.sa1`: met.
+  - Goal 4, macOS tests and a Windows build: partly met. macOS passes. The Windows build hasn't run on this round's code, and it runs when `tier2-app` is pushed to the PR.
+- **Next:** Nate's Windows VM click-through (checklist below), then the decisions listed under Blockers.
+- **Blockers:** Decisions for Nate. (1) A deck made with File > New has 0 time steps, as in ATB 3I, so New → GEBOD → Run writes no animation file; keep 3I's default or give File > New a runnable step count. (2) Inserting a segment on its own passes the app's check but the solver stops (STOP 24); make Insert-segment add a joint too, or make the check reject it. (3) GEBOD Replace drops references into the old body where ATB 3I points them at the new one. (4) GEBOD needs `C:\ATBFIG.SYS`, which a normal Windows user may not be able to write; the VM pass checks this as a standard user. (5) The follow camera rides the torso as in ATB 3I, so a wall or floor can hide the body in 3 frames. (6) Lane goal 2 compares against reference outputs, but the solver's numbers vary by computer, so the robot compares the app's run with a direct run instead; the goal's wording should say that. (7) Still open from round 1: the labeler item says three mislabelled `H.1.a` rows but there is one; confirm what "Z up on screen" meant; D.4 holds no segment reference, so nothing there shifts.
 - **Last updated:** 2026-09-12
+
+## Windows VM click-through (Nate, before anything goes to the client)
+
+The cloud robot proves the paths it scripts. This pass covers what it can't: dialogs a person answers, drag and paste from Excel, feel and speed, and a normal (non-admin) Windows user.
+
+**Setup (one time, ~1 hr)**
+1. `brew install --cask utm crystalfetch`; in CrystalFetch download Windows 11 ARM.
+2. UTM → New → Virtualize → Windows, 4 cores, 8 GB RAM, 64 GB disk; install (skip activation).
+3. In Windows, create a second **standard** (non-admin) user; do every step below as that user.
+4. On the Mac: `GITHUB_TOKEN= gh run download 34735611144 -n app-e2e -D ~/atb-vm` (about 190 MB; the app is in `~/atb-vm/app/`, next to `atb-win32.exe`). Copy `app/` into the UTM shared folder, then to `C:\Users\<user>\ATB`, with `cases/` and `example/` beside it.
+   The app is x64 and the solver 32-bit; Windows on ARM emulates both. The viewer uses software rendering in UTM (slow, correct).
+
+**Checks** (tick each; screenshot anything odd)
+- [ ] Open each of the 12 `cases/*.LIN`; every scope-table screen opens.
+- [ ] Edit one value, Save, reopen: the value is there and nothing else moved.
+- [ ] Copy 3 rows from Excel (or Notepad, tab-separated) into a grid: they land as rows; on a segment screen, the B.1 count grows.
+- [ ] Break a card on purpose (delete a token), Save: a warning lists the line; Cancel keeps the file unchanged, OK saves.
+- [ ] Run `2479_2.LIN`: the Save dialog asks where to put results; pick an existing name → Windows asks to replace. Results appear; the progress window closes.
+- [ ] Run again and press Cancel: the solver stops within ~2 s and the old results are untouched.
+- [ ] Convert `example/Sled.ain`: the resulting `.lin` opens in the grid.
+- [ ] Viewer: open three `.sa1` files (incl. `2495_2`, `example/sledout.sa1`); play start to end, step, change speed; belts drawn on frame 0; toggle a segment off/on restores its colour; segment camera stays centred on the segment.
+- [ ] Insert a segment and a joint in `2479_2.LIN`, Save, Run: it finishes.
+- [ ] File > New → Tools > GEBOD → 50th-percentile adult male → Add as new body → Save → Run: it finishes. **As the standard user:** note whether GEBOD errors writing `C:\ATBFIG.SYS`.
+- [ ] Open `2479_2.LIN` → GEBOD → Replace body 1: one confirmation lists what will be removed; No leaves the deck unchanged; Yes merges and the deck runs.
 
 ## Round 1b — acceptance-review fixes
 
