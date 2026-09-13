@@ -222,7 +222,7 @@ Context: `README.md` (solver, verification), `docs/TIER2-SCOPE.md` (feature list
     - In that run each `cases/*.LIN` edit + Save differs from the original in exactly the edited token; Run on `2479_2.LIN` through the app yields `.aou/.sa1/.t2x` identical to a direct `atb-win32.exe` run of the same deck in the same job, per `frontend/probe/compare.py cross` with `frontend/package/volatile.txt` (the solver's results vary by runner CPU, so the references are not the gate), with `cmp.py`'s report against the references uploaded alongside; and the renumbered deck runs to completion
     - The viewer scenario plays every `.sa1` with no error dialog, and its screenshots are listed in the item report with what each shows
     - `app/Atb.Core.Tests/fixtures/gebod-50m.ain` is committed from the probe, and the item report says whether `Gebodv.exe` succeeds without `C:\ATBFIG.SYS`
-  status: not started
+  status: done
 
 - task: Merge GEBOD output into the open deck, as ATB 3I does from its Body screen (`decomp/ATB3I/Body.cs:964-1076`
     Add / Insert before / Insert after / Replace; `GEBOD.cs:2239-2417` `InsertHumanBody`;
@@ -246,7 +246,7 @@ Context: `README.md` (solver, verification), `docs/TIER2-SCOPE.md` (feature list
     - File > New's deck plus a GEBOD Add passes `Deck.Validate()` (unit test)
     - `dotnet build app/Atb.sln` passes with the placement choice on `GebodForm` and Tools > GEBOD merging into the open deck
   caution: true
-  status: not started
+  status: in progress
 
 - task: Full Windows end-to-end pass — add a GEBOD scenario to `Atb.App.UiTests` (File > New → Tools >
     GEBOD, 50th-percentile adult male, Add as new body → Save → Run to completion, screenshots each step)
