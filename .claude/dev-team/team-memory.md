@@ -62,3 +62,10 @@
 - **What worked:** delta QA + delta review after every fix pass; QA writing failing tests for the review's finding before the fix.
 - **What failed:** spin-class paste check took 3 passes (B.3.A only → B.4/B.5 presence only → half-filled B.5 block). Should have asked for all-or-none on every joint screen in one pass.
 - **Remember next run:** D.4 carries no segment ref (ATBUpdate.cs:227 updates AirbagID, never written to .LIN; input_airbags.for:98-105) — the done-when's "D.4 refs shift" is tested as "D.4 untouched"; human decision. Save/Run never called Deck.Validate before this item. Open: Run has no override (a solver-acceptable deck failing a per-card check can't run); half-filled B.5 row gets the wrong-Joint-Type message; hand-built rows with repeated cards bypass the spin check; Labeler still throws on NBLT/NBAG/NWATER>0.
+
+## 2026-09-12 17:52 — dev-team-auto — Round 1b validate before Save and Run
+- **Outcome:** DONE — 1 attempt — caution: no — team: dt-engineer opus/high — r1b-run-overwrite, 77b20ba
+- **What happened:** Moved the issue text into `DeckIssue.Format` (Atb.Core, 20-row cap + "... and N more"); Save and Run both warn with OKCancel (Cancel default); Save body split into `Write()` so Continue writes exactly what Save wrote and Run doesn't ask twice. Convert not wired (it takes an .ain, not the open deck).
+- **What worked:** Literal-string asserts for 0/1/20/21 issues; orchestrator mutation (drop line number) reddened exactly the 3 new formatter tests and nothing else.
+- **What failed:** none
+- **Remember next run:** The `done when:` naming Convert was N/A — plan criteria that name UI paths without an open deck should be checked against the code before the lane is written. Dialog not exercised on Windows; build-only verification for MainForm.
