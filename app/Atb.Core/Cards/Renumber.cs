@@ -261,6 +261,10 @@ public static class Renumber
                 // The copy keeps the template's B.4.B/B.5.B/B.5.C presence, which follows the spin class (Labeler.cs:61,66).
                 if (e == Entity.Joint && gi == 0 && Spin(row.First(l => l.Is("B.3.A"))) != Spin(data.Groups[0][0]))
                 { skipped.Add($"row {r}: Joint Type needs different B.4/B.5 lines than joint {template}"); continue; }
+                // ParsePaste drops a blank B.4.B/B.5.B/B.5.C block (Deck.cs:181), so on those screens the row's own
+                // spin-line presence must match the template joint's spin class (Labeler.cs:60,65).
+                if (e == Entity.Joint && gi > 0 && row.Any(l => l.Is("B.4.B") || l.Is("B.5.B")) != Spin(data.Groups[0][0]))
+                { skipped.Add($"row {r}: Joint Type needs different B.4/B.5 lines than joint {template}"); continue; }
                 data.Groups[gi] = row.ToList(); datas.Add(data); continue;
             }
             var block = data.Groups[0];

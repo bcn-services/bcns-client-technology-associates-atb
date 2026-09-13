@@ -257,6 +257,36 @@ public class RenumberGapTests
         Assert.Equal(before, deck.Write());
     }
 
+    // --- review: B.4 / B.5 joint paste keeps the template's spin-line layout (Labeler.cs:60,65; Deck.cs:181) ---
+
+    [Fact]
+    public void PasteB4RowWithSpinLine_OnNonSpinTemplate_IsRejected_DeckUnchanged()
+    {
+        var deck = Deck.Load(Fixture);
+        var before = deck.Write();
+        var cards = new[] { "B.4.A", "B.4.B" };
+        const string text = "0\t10\t0\t0.7\t20\t0\t10\t0\t0.7\t5\t1\t2\t3\t4\t5\t6\t7\t8\r\n";   // B.4.A + a B.4.B line
+        var res = Deck.ParsePaste(text, cards);
+        Assert.Equal(2, Assert.Single(res.Rows).Count);
+
+        Assert.Equal(["row 1: Joint Type needs different B.4/B.5 lines than joint 2"], Renumber.Paste(deck, Entity.Joint, cards, 3, 2, res.Rows));
+        Assert.Equal(before, deck.Write());
+    }
+
+    [Fact]
+    public void PasteB5RowWithSpinLines_OnNonSpinTemplate_IsRejected_DeckUnchanged()
+    {
+        var deck = Deck.Load(Fixture);
+        var before = deck.Write();
+        var cards = new[] { "B.5.A", "B.5.B", "B.5.C" };
+        const string text = "0.1\t0\t30\t0\t0\t0\t0\t1\t2\t3\t4\t5\t6\t7\t1\t2\t3\t4\t5\t6\t7\r\n"; // B.5.A + B.5.B + B.5.C
+        var res = Deck.ParsePaste(text, cards);
+        Assert.Equal(3, Assert.Single(res.Rows).Count);
+
+        Assert.Equal(["row 1: Joint Type needs different B.4/B.5 lines than joint 2"], Renumber.Paste(deck, Entity.Joint, cards, 3, 2, res.Rows));
+        Assert.Equal(before, deck.Write());
+    }
+
     // --- (5) D.6 Type 5 ---
 
     static Deck Type5Deck() => Spliced(
