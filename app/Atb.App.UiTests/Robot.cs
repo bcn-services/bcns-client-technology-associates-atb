@@ -134,11 +134,32 @@ public sealed class Robot : IDisposable
         {
             var li = cb.FindFirstDescendant(cond)
                      ?? A.GetDesktop().FindAllChildren(Cf.ByProcessId(App.ProcessId)).Select(w => w.FindFirstDescendant(cond)).FirstOrDefault(e => e != null);
+            li?.Patterns.ScrollItem.PatternOrDefault?.ScrollIntoView();
             li?.Click(); return li;       // a collapsed list has no clickable point: throws, Until retries
         }, 10, $"list item '{item}' of '{combo}'");
         Wait.UntilInputIsProcessed();
+        if (!Poll(() => ComboText(cb) == item, 3))
+        {
+            // A long list (the viewer's Camera, 35+ entries) can leave the item outside the drop-down, so the click
+            // lands elsewhere; select it with the keyboard by its index among the items, found by name.
+            if (cb.AsComboBox().ExpandCollapseState == FlaUI.Core.Definitions.ExpandCollapseState.Expanded) Press(VirtualKeyShort.ESCAPE);
+            var names = cb.AsComboBox().Items.Select(i => i.Name).ToList();
+            if (cb.AsComboBox().ExpandCollapseState == FlaUI.Core.Definitions.ExpandCollapseState.Expanded) Press(VirtualKeyShort.ESCAPE);
+            int idx = names.IndexOf(item);
+            if (idx < 0) throw new InvalidOperationException($"'{combo}' has no item '{item}'");
+            cb.Focus(); Press(VirtualKeyShort.HOME);
+            for (int k = 0; k < idx; k++) Press(VirtualKeyShort.DOWN);
+            Log($"{combo}: keyboard-selected item {idx}");
+        }
         UntilTrue(() => ComboText(cb) == item, 5, $"'{combo}' shows '{item}' (shows '{ComboText(cb)}')");
         Log($"{combo} = {item}");
+    }
+
+    static bool Poll(Func<bool> ok, int sec)
+    {
+        var end = DateTime.UtcNow.AddSeconds(sec);
+        do { try { if (ok()) return true; } catch { } Thread.Sleep(200); } while (DateTime.UtcNow < end);
+        return false;
     }
 
     /// Type into the text box named `name`, replacing its text.

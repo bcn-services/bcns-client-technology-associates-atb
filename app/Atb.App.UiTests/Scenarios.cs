@@ -225,8 +225,9 @@ public class Scenarios
     static string? Mover(Sa1File s)
     {
         if (s.Frames.Count < 2) return null;
-        var names = Enumerable.Range(0, s.NGnd).Select(i => i < s.Segments.Count ? s.Segments[i].Name.Trim() : $"Entry {i + 1}").ToList();
-        return Enumerable.Range(0, s.NGnd)
+        // body segments only (vehicles/planes are "Entry N"): the follow camera should track the occupant
+        var names = s.Segments.Select(g => g.Name.Trim()).ToList();
+        return Enumerable.Range(0, Math.Min(s.NGnd, names.Count))
             .Where(i => names[i].Length > 0 && names.Count(x => x == names[i]) == 1 && names[i] != "View all (fixed)")
             .OrderByDescending(i => System.Numerics.Vector3.Distance(s.Frames[0].Position(i), s.Frames[^1].Position(i)))
             .Select(i => names[i]).FirstOrDefault();
