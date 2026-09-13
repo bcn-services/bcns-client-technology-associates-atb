@@ -298,8 +298,8 @@ public sealed class MainForm : Form
         return d.ShowDialog(this) == DialogResult.OK ? RunSolver(SolverMode.ConvertAin, d.FileName) : Task.CompletedTask;
     }
 
-    /// Run or convert through SolverRun (stdin feed) in a fresh scratch dir; SolverJob.Finish copies the outputs
-    /// next to the input file and deletes the scratch dir. Solver work and cleanup run off the UI thread.
+    /// Run or convert through SolverRun (stdin feed) in a fresh scratch dir; SolverJob.Finish copies the outputs of a
+    /// successful run to the name chosen in the Save dialog and always deletes the scratch dir. Solver work and cleanup run off the UI thread.
     async Task RunSolver(SolverMode job, string input)
     {
         if (running) return;
@@ -307,6 +307,18 @@ public sealed class MainForm : Form
         if (solverExe == null) return;
         var b = Path.GetFileNameWithoutExtension(input);
         string verb = job == SolverMode.ConvertAin ? "Convert" : "Run";
+        // ATB 3I asked for the output name every time (MainMenu.cs:3072-3081); nothing lands next to the deck unless chosen here.
+        string destDir, destBase;
+        using (var save = new SaveFileDialog
+        {
+            Title = "Save results as", OverwritePrompt = true, FileName = b,
+            InitialDirectory = Path.GetDirectoryName(Path.GetFullPath(input)),
+            Filter = job == SolverMode.ConvertAin ? "ATB free format input (*.lin)|*.lin" : "ATB main output (*.aou)|*.aou",
+        })
+        {
+            if (save.ShowDialog(this) != DialogResult.OK) return;
+            destDir = Path.GetDirectoryName(save.FileName)!; destBase = Path.GetFileNameWithoutExtension(save.FileName);
+        }
         // Stdin is the one feed mode that needs neither window focus nor Handoff (which writes C:\ATBFIG.SYS and sweeps System32).
         var work = Path.Combine(SolverRun.ShortWorkRoot(), Guid.NewGuid().ToString("N")[..8]);
         var o = new RunOptions { ExePath = solverExe, WorkDir = work, InputBase = b, OutputBase = b, Mode = FeedMode.Stdin, Job = job };
@@ -321,10 +333,15 @@ public sealed class MainForm : Form
         {
             (r, outs) = await Task.Run(() =>
             {
-                Directory.CreateDirectory(work);
-                File.Copy(input, Path.Combine(work, b + SolverJob.InputExt(job)), true);
-                var res = sr.Run(o);
-                return (res, SolverJob.Finish(work, b, input, job, cancelled: res.Error == "cancelled"));
+                RunResult res;
+                try
+                {
+                    Directory.CreateDirectory(work);
+                    File.Copy(input, Path.Combine(work, b + SolverJob.InputExt(job)), true);
+                    res = sr.Run(o);
+                }
+                catch { SolverJob.Finish(work, b, destDir, destBase, job, succeeded: false); throw; }   // scratch dir never outlives a throw
+                return (res, SolverJob.Finish(work, b, destDir, destBase, job, succeeded: res.Success));
             });
         }
         catch (Exception ex)
@@ -341,9 +358,8 @@ public sealed class MainForm : Form
             return;
         }
         status.Text = $"{verb} finished in {r.ElapsedSec:F1} s: {string.Join(", ", outs.Select(Path.GetFileName))}";
-        var dir = Path.GetDirectoryName(Path.GetFullPath(input))!;
-        if (job == SolverMode.ConvertAin) { Open(Path.Combine(dir, b + ".lin")); return; }
-        var sa1 = Path.Combine(dir, b + ".sa1");
+        if (job == SolverMode.ConvertAin) { Open(Path.Combine(destDir, destBase + ".lin")); return; }
+        var sa1 = Path.Combine(destDir, destBase + ".sa1");
         if (File.Exists(sa1) && MessageBox.Show(this, "Run finished. Open the animation?", "ATB run", MessageBoxButtons.YesNo) == DialogResult.Yes)
             new AnimationForm(Sa1File.Load(sa1)).Show(this);
     }

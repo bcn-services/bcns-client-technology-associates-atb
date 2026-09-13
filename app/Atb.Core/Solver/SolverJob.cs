@@ -42,20 +42,20 @@ public static class SolverJob
         return list;
     }
 
-    /// Ends a run: unless cancelled, copies the outputs in workDir next to deckPath (overwriting), then deletes
-    /// workDir. Returns the copied paths (empty when cancelled). A missing workDir is fine.
-    public static List<string> Finish(string workDir, string outBase, string deckPath, SolverMode mode, bool cancelled)
+    /// Ends a run: only when it succeeded, copies each output <outBase>.<ext> in workDir to destDir\<destBase>.<ext>
+    /// (overwriting; the user confirmed the name in a Save dialog, as ATB 3I did, MainMenu.cs:3072-3081). Always
+    /// deletes workDir, even when a copy throws. Returns the copied paths (empty unless succeeded). A missing workDir is fine.
+    public static List<string> Finish(string workDir, string outBase, string destDir, string destBase, SolverMode mode, bool succeeded)
     {
         var copied = new List<string>();
         if (!Directory.Exists(workDir)) return copied;
         try
         {
-            if (!cancelled)
+            if (succeeded)
             {
-                var dest = Path.GetDirectoryName(Path.GetFullPath(deckPath))!;
                 foreach (var f in Outputs(workDir, outBase, mode))
                 {
-                    var to = Path.Combine(dest, Path.GetFileName(f));
+                    var to = Path.Combine(destDir, destBase + Path.GetExtension(f));
                     File.Copy(f, to, true);
                     copied.Add(to);
                 }
