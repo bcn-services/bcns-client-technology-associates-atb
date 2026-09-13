@@ -256,7 +256,7 @@ Context: `README.md` (solver, verification), `docs/TIER2-SCOPE.md` (feature list
   done when:
     - A dispatched `app-e2e.yml` run with every scenario, the GEBOD one included, completes green (run URL in the item report)
     - Every screenshot in that run's artifact is listed in the item report with what it shows, and none shows an error dialog
-  status: in progress
+  status: done
 
 > **⚠️ AUTONOMOUS RUN — STOP HERE**
 

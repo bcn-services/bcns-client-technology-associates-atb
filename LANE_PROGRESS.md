@@ -18,7 +18,7 @@ LANE.md is the contract; this tracks where we are in it — if they disagree, LA
 | Validate the deck before Save and Run | done — Save and Run now list any problems in the deck by line number and let you cancel or continue; Continue saves exactly what Save always did. |
 | Windows UI test robot | done — A robot on GitHub's Windows machines now opens, edits, saves, runs and animates every client deck in the real app and screenshots each step; the app's run matches a direct solver run exactly. |
 | Merge GEBOD output into the open deck | done — Tools > GEBOD now adds its body to the open deck (as a new body, before or after a body, or replacing one), File > New makes an empty deck to start from, and every merged deck runs in the solver. |
-| Full Windows end-to-end pass | not started |
+| Full Windows end-to-end pass | done — Every scenario, including File > New → GEBOD → Save → Run, now passes on GitHub's Windows machines, and all 165 screenshots were checked; the viewer's follow-the-body camera now appears in each animation check. |
 
 ## Round 1 — core model, generic editor, run, viewer
 
