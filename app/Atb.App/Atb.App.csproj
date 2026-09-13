@@ -20,5 +20,9 @@
     <!-- Unmodified GEBOD body generator (ATB 1.3 patch) and its data file, shipped beside ATB.exe; Tools > GEBOD runs it. -->
     <None Include="../../frontend/bin/Gebodv.exe;../../frontend/bin/GEBOD.DAT" Link="%(Filename)%(Extension)"
           CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <!-- The solver, beside ATB.exe (MainForm.FindSolver looks there first). Built by windows-build.yml into the repo
+         root (gitignored); publishes without it on machines that have not built it. -->
+    <Content Include="../../atb-win32.exe" Link="atb-win32.exe" Condition="Exists('../../atb-win32.exe')"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
   </ItemGroup>
 </Project>

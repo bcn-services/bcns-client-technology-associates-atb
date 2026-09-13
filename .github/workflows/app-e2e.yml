@@ -1,0 +1,123 @@
+# End-to-end robot for the desktop app on a real Windows desktop: builds the solver (windows-build.yml), publishes
+# ATB.exe with atb-win32.exe beside it, probes Gebodv.exe, then drives the app with FlaUI (app/Atb.App.UiTests) on temp
+# copies of the decks. Gates: tokendiff.py (edit + Save changes exactly the edited token) and cross_gate.py (Run through
+# the app == direct atb-win32.exe run in this job, modulo frontend/package/volatile.txt). cmp.py vs the references is a report.
+#   GITHUB_TOKEN= gh workflow run app-e2e.yml -f filter='FullyQualifiedName~Viewer'   (once on main; else push the branch)
+name: Desktop app end-to-end (UI robot)
+on:
+  workflow_dispatch:
+    inputs:
+      filter:
+        description: "dotnet test --filter for the robot (empty = every scenario)"
+        type: string
+        default: ""
+  push:
+    branches: [r1b-run-overwrite]
+    paths: ['app/**', 'frontend/**', 'src/**', 'verify/**', '.github/workflows/app-e2e.yml', '.github/workflows/windows-build.yml']
+
+jobs:
+  solver:
+    uses: ./.github/workflows/windows-build.yml
+
+  e2e:
+    needs: solver
+    runs-on: windows-2022
+    timeout-minutes: 90
+    env:
+      FILTER: ${{ inputs.filter }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: atb-win32-exe
+          path: .
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Paths, runner info, screen
+        shell: pwsh
+        run: |
+          "WORK=$env:RUNNER_TEMP\w" >> $env:GITHUB_ENV
+          "E2E_OUT=$env:RUNNER_TEMP\e2e" >> $env:GITHUB_ENV
+          "ATB_EXE=$PWD\out\app\ATB.exe" >> $env:GITHUB_ENV
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\w", "$env:RUNNER_TEMP\e2e" | Out-Null
+          try { Set-DisplayResolution -Width 1920 -Height 1080 -Force -ErrorAction Stop } catch { "Set-DisplayResolution: $_" }
+          Add-Type -AssemblyName System.Windows.Forms
+          $os = Get-CimInstance Win32_OperatingSystem; $cpu = Get-CimInstance Win32_Processor
+          @("OS: $($os.Caption) $($os.Version)", "CPU: $($cpu.Name)", "Image: $env:ImageOS $env:ImageVersion",
+            "Screen: $([System.Windows.Forms.Screen]::PrimaryScreen.Bounds)", "Interactive: $([Environment]::UserInteractive) user=$env:USERNAME") |
+            Tee-Object "$env:RUNNER_TEMP\e2e\runner-info.txt"
+
+      - name: Publish app (as app-build.yml) with atb-win32.exe beside ATB.exe
+        run: |
+          set -e
+          dotnet publish app/Atb.App -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o out/app 2>&1 | tail -5
+          ls -l out/app
+          cmp atb-win32.exe out/app/atb-win32.exe && echo "out/app/atb-win32.exe == solver artifact"
+
+      - name: Build UI robot
+        run: dotnet build app/Atb.App.UiTests -c Release 2>&1 | tail -5
+
+      - name: GEBOD probe (Gebodv.exe with and without C:\ATBFIG.SYS)
+        if: env.FILTER == '' || contains(env.FILTER, 'Gebod')
+        run: dotnet test app/Atb.App.UiTests -c Release --no-build --filter "FullyQualifiedName~GebodProbe" --logger "console;verbosity=normal"
+
+      - name: UI scenarios
+        run: |
+          f="${FILTER:-FullyQualifiedName!~GebodProbe}"
+          dotnet test app/Atb.App.UiTests -c Release --no-build --filter "$f" --logger "console;verbosity=normal" \
+            --logger "trx;LogFileName=robot.trx" --results-directory "$E2E_OUT/trx"
+
+      - name: Direct atb-win32.exe run of 2479_2 (same answers as the app)
+        if: always()
+        run: |
+          W="$(cygpath -u "$WORK")/direct"; mkdir -p "$W/2479_2"; E="$PWD/atb-win32.exe"
+          cp cases/2479/2479_2.LIN "$W/2479_2/2479_2.lin"
+          t0=$(date +%s)
+          ( cd "$W/2479_2" && printf 'y\n\nl\n2479_2\n2479_2\n' | "$E" > 2479_2.term.log 2>&1 ); rc=$?
+          # keep what SolverJob.IsOutputExt keeps, renamed as the app's Save dialog names them
+          for f in "$W"/2479_2/2479_2.*; do
+            x="${f##*.}"; echo "$x" | grep -qiE '^(aou|sa1|dbg|tp1|st1|st2|t[0-9][0-9])$' && mv "$f" "$W/2479_2/2479_2_new.$x"
+          done
+          echo "2479_2 2479 2479_2 2479_2 $rc $(( $(date +%s) - t0 ))" > "$W/cases.txt"
+          cat "$W/cases.txt"; ls "$W/2479_2"
+          [ "$rc" = 0 ] || [ "$rc" = 1 ]
+
+      - name: "Gate: each edit + Save changed exactly the edited token"
+        if: always() && (env.FILTER == '' || contains(env.FILTER, 'GridEditSave'))
+        run: python app/Atb.App.UiTests/tokendiff.py "$E2E_OUT/edits.tsv" $(ls cases/*/*.LIN | wc -l) | tee "$E2E_OUT/tokendiff.txt"; exit ${PIPESTATUS[0]}
+
+      - name: "Gate: app run == direct run (compare.py cross, volatile.txt)"
+        if: always() && (env.FILTER == '' || contains(env.FILTER, 'Run2479'))
+        run: python app/Atb.App.UiTests/cross_gate.py "$WORK" "$WORK/direct" | tee "$E2E_OUT/cross.txt"; exit ${PIPESTATUS[0]}
+
+      - name: cmp.py report against the client references (report only; varies by runner CPU)
+        if: always()
+        run: |
+          EXAMPLES=cases WORK="$WORK" python verify/cmp.py 2>&1 | tee "$E2E_OUT/cmp-app.txt" || true
+          EXAMPLES=cases WORK="$WORK/direct" python verify/cmp.py 2>&1 | tee "$E2E_OUT/cmp-direct.txt" || true
+
+      - name: "Guardrail: cases/ untouched"
+        if: always()
+        run: git diff --exit-code --stat -- cases && [ -z "$(git status --porcelain -- cases)" ] && echo "cases/ clean"
+
+      - name: Collect
+        if: always()
+        run: |
+          O="$(cygpath -u "$E2E_OUT")"; W="$(cygpath -u "$WORK")"
+          mkdir -p "$O/app" "$O/outputs"
+          cp -R out/app/. "$O/app/" 2>/dev/null || true
+          for d in 2479_2 direct ins; do [ -d "$W/$d" ] && cp -R "$W/$d" "$O/outputs/"; done
+          cp "$W/cases.txt" "$O/outputs/" 2>/dev/null || true
+          find "$O/shots" -name '*.png' 2>/dev/null | sort > "$O/screenshots.txt"; wc -l < "$O/screenshots.txt"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: app-e2e
+          path: ${{ runner.temp }}/e2e/
+          if-no-files-found: error
