@@ -258,12 +258,13 @@ public static class Renumber
             var data = Copy(d, e, template);
             if (e != Entity.Vehicle)
             {
-                // The copy keeps the template's B.4.B/B.5.B/B.5.C presence, which follows the spin class (Labeler.cs:61,66).
+                // The copy keeps the template's B.4.B/B.5.B/B.5.C presence, which follows the spin class (Labeler.cs:60,65).
                 if (e == Entity.Joint && gi == 0 && Spin(row.First(l => l.Is("B.3.A"))) != Spin(data.Groups[0][0]))
                 { skipped.Add($"row {r}: Joint Type needs different B.4/B.5 lines than joint {template}"); continue; }
                 // ParsePaste drops a blank B.4.B/B.5.B/B.5.C block (Deck.cs:181), so on those screens the row's own
-                // spin-line presence must match the template joint's spin class (Labeler.cs:60,65).
-                if (e == Entity.Joint && gi > 0 && row.Any(l => l.Is("B.4.B") || l.Is("B.5.B")) != Spin(data.Groups[0][0]))
+                // spin lines must be all present on a spin template, all absent otherwise (Labeler.cs:60,65) — a
+                // half-filled B.5 block is rejected. Each card appears at most once and the A line always does.
+                if (e == Entity.Joint && gi > 0 && row.Count != (Spin(data.Groups[0][0]) ? cards.Count : 1))
                 { skipped.Add($"row {r}: Joint Type needs different B.4/B.5 lines than joint {template}"); continue; }
                 data.Groups[gi] = row.ToList(); datas.Add(data); continue;
             }
