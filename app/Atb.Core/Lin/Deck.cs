@@ -122,7 +122,7 @@ public sealed class Deck
         error = null;
         var v = text.Trim();
         if (kind == Kind.Str || (kind == null && quoted)) return "\"" + text.Replace('"', '\'') + "\"";
-        bool whole = kind is Kind.Int or Kind.SegRef or Kind.JointRef or Kind.PlaneRef or Kind.FuncRef or Kind.EllipRef;
+        bool whole = kind is Kind.Int or Kind.SegRef or Kind.JointRef or Kind.PlaneRef or Kind.FuncRef or Kind.EllipRef or Kind.ActRef;
         bool ok = whole ? int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out _)
                         : double.TryParse(v.Replace('D', 'E').Replace('d', 'e'), NumberStyles.Float, CultureInfo.InvariantCulture, out _);
         if (ok) return v;
@@ -182,7 +182,7 @@ public sealed class Deck
             }
             if (why == null && cells.Skip(pos).Any(c => c.Trim().Length > 0))
                 why = $"{cells.Length} cells, more than {string.Join(" + ", group)} holds";
-            if (why == null) res.Lines.AddRange(lines); else res.Rejected.Add($"row {r + 1}: {why}");
+            if (why == null) { res.Lines.AddRange(lines); res.Rows.Add(lines); } else res.Rejected.Add($"row {r + 1}: {why}");
         }
         return res;
     }
@@ -226,4 +226,8 @@ public sealed class Deck
 
 public sealed record DeckIssue(int Line, string Label, string Reason);
 
-public sealed record PasteResult(List<DeckLine> Lines, List<string> Rejected);
+public sealed record PasteResult(List<DeckLine> Lines, List<string> Rejected)
+{
+    /// Accepted rows, one line list each (Lines flattened): entity screens insert them one entity per row.
+    public List<List<DeckLine>> Rows { get; } = new();
+}

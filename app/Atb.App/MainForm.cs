@@ -172,6 +172,7 @@ public sealed class MainForm : Form
         "B.2.A" or "B.6" or "G.3.A" => Entity.Segment,
         "B.3.A" or "B.4.A" or "B.5.A" => Entity.Joint,
         "D.2.A" => Entity.Plane,
+        "F.10" => Entity.Actuator,
         "C.1" or "C.2.A" => Entity.Vehicle,
         _ => null,
     };
@@ -245,9 +246,27 @@ public sealed class MainForm : Form
     {
         if (screen == null || !Clipboard.ContainsText()) return;
         var res = Deck.ParsePaste(Clipboard.GetText(), screen.Cards);
-        InsertLines(res.Lines, "Paste");
-        if (res.Rejected.Count > 0)
-            MessageBox.Show(this, "Rows not pasted:\n" + string.Join("\n", res.Rejected.Take(20)), "Paste", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        var rejected = res.Rejected;
+        if (deck != null && EntityOf(screen) is { } e)
+        {
+            var sel = SelectedIndexes();
+            if (sel.Length == 0) { status.Text = "Select the row to paste after (its copy fills the entity's other cards)."; return; }
+            if (res.Rows.Count > 0)
+            {
+                grid.EndEdit();
+                int n = sel[^1] + 1, at = e == Entity.Vehicle ? n : n + 1;   // as AddRow: a vehicle goes before the selected one
+                try
+                {
+                    rejected.AddRange(Renumber.Paste(deck, e, screen.Cards, at, n, res.Rows));
+                    dirty = true; ShowScreen(screen);
+                    status.Text = $"Pasted {e.ToString().ToLowerInvariant()}(s) at {at}; references and count cards renumbered.";
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or ArgumentOutOfRangeException) { status.Text = ex.Message; }
+            }
+        }
+        else InsertLines(res.Lines, "Paste");
+        if (rejected.Count > 0)
+            MessageBox.Show(this, "Rows not pasted:\n" + string.Join("\n", rejected.Take(20)), "Paste", MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 
     void OpenDialog()

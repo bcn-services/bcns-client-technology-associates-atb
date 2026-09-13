@@ -94,9 +94,7 @@ public static class Labeler
             // ponytail: D.3/D.4 (belts/airbags), F.2/F.6 and F.9 (water) have no schema entry and no corpus deck — throw.
             if (nblt > 0 || nbag > 0) throw Err("D.1.A NBLT/NBAG > 0: belt and airbag cards (D.3/D.4) are not supported");
             for (int k = 0; k < nelp; k++) Take("D.5", 13);
-            for (int k = 0; k < nq; k++)
-                // ponytail: a Type 5 constraint's second line is consumed unlabelled, layout unverified.
-                if (I(Take("D.6", 9), 0, "D.6") == 5) SkipLine();
+            for (int k = 0; k < nq; k++) Take("D.6", 9);   // one line per constraint, any KQTYPE (src/input_contraints.for:29)
             Take("D.7", nSeg);
             for (int k = 0; k < nsd; k++) Take("D.8", 13);
             for (int k = 0; k < nforce; k++) Take("D.9", 8);
@@ -231,7 +229,6 @@ public static class Labeler
             return l.Tokens;
         }
 
-        void SkipLine() { SkipBlanks(); if (pos >= lines.Count) throw Err("deck ends in a D.6 Type 5 second line"); pos++; }
 
         void SkipBlanks() { while (pos < lines.Count && lines[pos].Count == 0 && lines[pos].Label.Length == 0) pos++; }
 

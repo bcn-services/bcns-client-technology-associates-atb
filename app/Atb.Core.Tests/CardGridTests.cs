@@ -152,7 +152,8 @@ public class CardGridTests
 
     /// Pins the header total so dropping a name the decks cannot expose (e.g. H.7 Count) goes red.
     [Fact]
-    public void SchemaHeaderTotal_IsPinned() => Assert.Equal(470, CardSchema.Cards.Values.Sum(c => c.Names.Length));
+    // 470 + 43 round-1b names: F.2.A 1, F.2.B 9, F.6 4, F.9.F 10, F.9.G 6, F.9.I 5, F.9.J1 7, F.9.M 1.
+    public void SchemaHeaderTotal_IsPinned() => Assert.Equal(513,CardSchema.Cards.Values.Sum(c => c.Names.Length));
 
     [Fact]
     public void Screens_UseScopeTableTitles_AndCoverTheScopeCards()

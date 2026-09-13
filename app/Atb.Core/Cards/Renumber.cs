@@ -3,7 +3,7 @@ using Atb.Core.Lin;
 
 namespace Atb.Core.Cards;
 
-public enum Entity { Segment, Joint, Plane, Vehicle }
+public enum Entity { Segment, Joint, Plane, Vehicle, Actuator }
 
 /// One field that refers to an entity: 1-based deck line, that line's label, the schema field name.
 public sealed record RefSite(int Line, string Label, string Field);
@@ -28,6 +28,7 @@ public static class Renumber
         Entity.Segment => [["B.2.A", "B.2.B"], ["B.6"], ["G.3.A"]],
         Entity.Joint => [["B.3.A", "B.3.B", "B.3.C"], ["B.4.A", "B.4.B"], ["B.5.A", "B.5.B", "B.5.C"]],
         Entity.Plane => [["D.2.A", "D.2.B", "D.2.C", "D.2.D"]],
+        Entity.Actuator => [["F.10"]],
         _ => [["C.1"]],                                       // a vehicle is its whole C.1..C.5 block
     };
 
@@ -45,10 +46,11 @@ public static class Renumber
     {
         Entity.Joint => [Kind.JointRef],
         Entity.Plane => [Kind.PlaneRef],
+        Entity.Actuator => [Kind.ActRef],
         _ => [Kind.SegRef, Kind.EllipRef],
     };
 
-    static string Owner(Entity e) => e switch { Entity.Segment => "B.2.A", Entity.Joint => "B.3.A", Entity.Plane => "D.2.A", _ => "C.1" };
+    static string Owner(Entity e) => e switch { Entity.Segment => "B.2.A", Entity.Joint => "B.3.A", Entity.Plane => "D.2.A", Entity.Actuator => "F.10", _ => "C.1" };
 
     /// Rows ATB 3I deletes with the entity (delCascade = true) and the count each one is tallied in.
     /// Index -1: the count is a list value, indexed by the row's first field (F.1.B Plane, F.3.B Segment A, F.4.B Joint).
@@ -56,17 +58,25 @@ public static class Renumber
     {
         Entity.Joint => new() { ["F.10"] = ("D.1.B", 0), ["F.4.B"] = ("F.4.A", -1) },
         Entity.Plane => new() { ["F.1.B"] = ("F.1.A", -1) },
+        Entity.Actuator => new(),
         _ => new()
         {
             ["D.5"] = ("D.1.A", 3), ["D.6"] = ("D.1.A", 4), ["D.8"] = ("D.1.A", 5), ["D.9"] = ("D.1.A", 9),
             ["F.1.B"] = ("F.1.A", -1), ["F.3.B"] = ("F.3.A", -1), ["F.10"] = ("D.1.B", 0),
+            // ATBUpdate.cs:237 F2b delCascade (default true); its resetRID "BeltID" is not copied: NJ must stay the belt's
+            // ordinal (input_belt_force.for:109), so compacting it breaks the deck (STANDARDS.md "ATB 3I divergences").
+            ["F.2.B"] = ("F.2.A", -1),
         },
     };
 
     /// Output lists whose entries are removed (and the leading count dropped) instead of cleared: key = index of the count.
     /// H.1-H.3 rows span lines and are reflowed by DropH13Rows instead.
     static readonly Dictionary<string, int> CountLed = new(StringComparer.OrdinalIgnoreCase)
-    { ["H.4"] = 0, ["H.5"] = 0, ["H.6"] = 0, ["H.7"] = 0, ["H.8"] = 0, ["H.9"] = 0, ["H.10.B"] = 1 };
+    {
+        ["H.4"] = 0, ["H.5"] = 0, ["H.6"] = 0, ["H.7"] = 0, ["H.8"] = 0, ["H.9"] = 0, ["H.10.B"] = 1,
+        ["H.11"] = 0,   // STANDARDS.md "ATB 3I divergences" H.11
+        ["F.6"] = 1,    // ATBUpdate.cs:242 F6 delCascade: the (Contact Segment, Contact Ellip) pair goes, NK drops by one
+    };
 
     // ATB 3I noDataMark for the non-cascade tables: B3B4B5M and C1C2a use -1, the others 0.
     static string Blank(string card) => card is "B.3.A" or "C.2.A" ? "-1" : "0";
@@ -120,13 +130,14 @@ public static class Renumber
         List<string>? List(string c) => lists.TryGetValue(c, out var v) ? v : ReadList(d, c) is { } r ? lists[c] = r : null;
 
         var cascade = Cascade(e);
-        for (int li = 0; li < d.Lines.Count; li++)
+        var acts = new List<int>();                                   // F.10 positions the cascade removes
+        for (int li = 0, f10 = 0; li < d.Lines.Count; li++)
         {
             var l = d.Lines[li];
+            if (l.Is("F.10")) f10++;
             if (gone.Contains(l) || !cascade.TryGetValue(l.Card, out var cnt) || !Marked(l, kinds).Any(i => Ref(l, i, l.Tokens[i]) == num)) continue;
             gone.Add(l);
-            // ponytail: a Type 5 constraint's unlabelled second D.6 line goes with it — layout unverified (no corpus deck).
-            if (l.Is("D.6") && Num(l.Tokens[0]) == 5 && li + 1 < d.Lines.Count && d.Lines[li + 1].Card.Length == 0) gone.Add(d.Lines[li + 1]);
+            if (l.Is("F.10")) acts.Add(f10);
             if (cnt.Index >= 0) Bump(d, cnt.Card, cnt.Index, -1);
             else if (List(cnt.Card) is { } v && Num(l.Tokens[0]) is int s && s >= 1 && s <= v.Count && Num(v[s - 1]) is int c)
                 v[s - 1] = Str(c - 1);
@@ -139,7 +150,21 @@ public static class Renumber
         foreach (var (c, v) in lists) WriteList(d, c, v);
 
         var drop = new HashSet<DeckLine>();
-        if (e != Entity.Joint && e != Entity.Plane) DropH13Rows(d, num, drop);
+        if (e is Entity.Segment or Entity.Vehicle) DropH13Rows(d, num, drop);
+        Unref(d, kinds, num, drop);
+        foreach (var a in acts.OrderDescending()) Unref(d, [Kind.ActRef], a, drop);   // highest first: lower numbers stay valid
+        d.Lines.RemoveAll(drop.Contains);
+        if (e == Entity.Actuator) Bump(d, "D.1.B", 0, -1);
+        // H.11 is read only when NRTORQ > 0 (input_h11_cards.for:33): with no actuator left the line has to go.
+        if (acts.Count > 0 || e == Entity.Actuator)
+            if (d.Card("D.1.B") is { Count: > 0 } b && Num(b.Tokens[0]) == 0) d.Lines.RemoveAll(l => l.Is("H.11"));
+        BumpCount(d, e, -1);
+        return data;
+    }
+
+    /// Clear or drop every marked ref to num (count-led lists lose the entry, others get the card's blank) and shift refs > num down.
+    static void Unref(Deck d, Kind[] kinds, int num, HashSet<DeckLine> drop)
+    {
         for (int li = 0; li < d.Lines.Count; li++)
         {
             var l = d.Lines[li];
@@ -169,10 +194,8 @@ public static class Renumber
             else foreach (var i in hit) t[i] = Blank(l.Card);
             l.SetTokens(t);
         }
-        d.Lines.RemoveAll(drop.Contains);
-        BumpCount(d, e, -1);
-        return data;
     }
+
 
     /// Insert data as entity n (1..Count+1; a vehicle goes before vehicle n, never after the primary).
     /// data's lines go into the deck as they are, so do not insert the same EntityData twice.
@@ -201,6 +224,48 @@ public static class Renumber
         if (e == Entity.Plane && own.FirstOrDefault(l => l.Is("D.2.A")) is { Count: > 0 } p) SetToken(p, 0, n);
         if (e == Entity.Vehicle && own.FirstOrDefault(l => l.Is("C.2.A")) is { Count: 14 } c2) SetToken(c2, 13, num);
     }
+
+    /// Grid paste on an entity screen (the same path as Add): pasted row k becomes entity at+k, and the entity's
+    /// other groups are copies of entity template's. cards is the screen's group. Returns why rows were skipped.
+    /// A vehicle row replaces the matching C.1 / C.2.A / C.2.B lines of a copy of the template's block, so it must keep the
+    /// template's C.3/C.4/C.5 layout (Interpolated Points, Spline Data Type, Number of Data Points).
+    // ponytail: a pasted joint row whose Joint Type needs B.4.B/B.5.B/C the template lacks (or vice versa) is not checked.
+    public static List<string> Paste(Deck d, Entity e, IReadOnlyList<string> cards, int at, int template, IEnumerable<IReadOnlyList<DeckLine>> rows)
+    {
+        Check(d, e, at, insert: true);
+        int gi = Array.FindIndex(Groups(e), g => g.SequenceEqual(cards, StringComparer.OrdinalIgnoreCase));
+        if (gi < 0 && e != Entity.Vehicle) throw new InvalidOperationException($"{string.Join(", ", cards)} is not a {e} group.");
+        var skipped = new List<string>();
+        var datas = new List<EntityData>();
+        int r = 0;
+        foreach (var row in rows)
+        {
+            r++;
+            var data = Copy(d, e, template);
+            if (e != Entity.Vehicle) { data.Groups[gi] = row.ToList(); datas.Add(data); continue; }
+            var block = data.Groups[0];
+            string? why = null;
+            foreach (var c in cards)
+            {
+                int bi = block.FindIndex(l => l.Is(c));
+                var p = row.FirstOrDefault(l => l.Is(c));
+                if ((bi < 0) != (p == null)) { why = $"{c} is in only one of the pasted row and vehicle {template}"; break; }
+                if (p == null) continue;
+                if (Layout(block[bi]) != Layout(p)) { why = $"{c} changes vehicle {template}'s C.3/C.4/C.5 layout"; break; }
+                block[bi] = p;
+            }
+            if (why == null) datas.Add(data); else skipped.Add($"row {r}: {why}");
+        }
+        for (int k = 0; k < datas.Count; k++) Insert(d, e, at + k, datas[k]);
+        return skipped;
+    }
+
+    static string Layout(DeckLine l) => l.Card switch
+    {
+        "C.2.A" => l.Count > 8 ? l.Tokens[8] : "",
+        "C.2.B" => l.Count > 2 ? l.Tokens[0] + " " + l.Tokens[2] : "",
+        _ => "",
+    };
 
     // --- helpers ---
 
@@ -248,7 +313,7 @@ public static class Renumber
     // (src/heding_hcards.for:103, output_hcards.for:72, heding_ang_displ.for:82, heding_wind.for:72, heding_jnt_parm.for:72).
     // Ref Segment (KREF) gets no ABS and must be >= 0 (input_h4_h9_cards.for:113); H.9's joint has no ABS (heding_joint_forces.for:51).
     static readonly HashSet<string> SignedCards = new(StringComparer.OrdinalIgnoreCase)
-    { "H.1.A", "H.1.B", "H.2.A", "H.2.B", "H.3.A", "H.3.B", "H.4", "H.5", "H.6", "H.7", "H.8" };
+    { "H.1.A", "H.1.B", "H.2.A", "H.2.B", "H.3.A", "H.3.B", "H.4", "H.5", "H.6", "H.7", "H.8", "H.11" };   // H.11: heding_actuators.for:70-71 SEG(ABS(KK))
 
     /// The entity number token i refers to: |value| in a sign-carrying H field, else the value.
     static int? Ref(DeckLine l, int i, string tok) =>
@@ -294,6 +359,7 @@ public static class Renumber
         if (e == Entity.Segment) Bump(d, "B.1", 0, delta);
         else if (e == Entity.Joint) Bump(d, "B.1", 1, delta);
         else if (e == Entity.Plane) Bump(d, "D.1.A", 0, delta);
+        else if (e == Entity.Actuator && delta > 0) Bump(d, "D.1.B", 0, delta);   // Delete bumps it itself, before the H.11 check
     }
 
     static List<string>? ReadList(Deck d, string card)

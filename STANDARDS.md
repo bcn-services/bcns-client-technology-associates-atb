@@ -11,3 +11,11 @@
 
 ## Tests
 - **Fixture literals**: renumbering tests assert written-out token lines from `cases/2479/2479_2.LIN` (Python oracle or hand-checked), plus File.ReadAllBytes for round-trips — never values computed by Atb.Core helpers.
+
+## ATB 3I divergences
+Renumber follows ATB 3I `ATB3I.Util/ATBUpdate.cs` except where 3I leaves a reference stale or breaks the deck:
+- **H cards are renumbered**: 3I never touches the H tables (`ATBUpdate.cs:203-308`); Renumber shifts, clears or drops H.1–H.11 refs so output selections keep pointing at the same segment/joint/actuator.
+- **H.11 actuators**: marked `a` (ActRef) = F.10 position. Deleting an F.10 row (directly or by the joint/segment cascade) drops it from H.11, shifts later actuators down and decrements Count; with NRTORQ = 0 the H.11 line is removed (read only when NRTORQ > 0, `input_h11_cards.for:33`). Compared on |v| (`heding_actuators.for:70-71`).
+- **F.2.B BeltID is not compacted**: 3I's `resetRID: "BeltID"` (`ATBUpdate.cs:237`) would renumber belts after a cascade delete, but the solver stops unless NJ = belt ordinal (`input_belt_force.for:109`). Other `resetRID` columns (RID, ActuatorID) are row order, which the deck keeps anyway.
+- **Not deck tokens**: D4aD4f/F6 `AirbagID` (D.4.a has no id, `FileManager.cs:1493`; F.6 writes the ordinal, `FileManager.cs:1778`) and F9m `Output SeqID` are 3I database keys; nothing in the .LIN to mark.
+- **D.6 is one line per constraint** for every Type (`input_contraints.for:29-30`).
