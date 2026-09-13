@@ -246,7 +246,7 @@ Context: `README.md` (solver, verification), `docs/TIER2-SCOPE.md` (feature list
     - File > New's deck plus a GEBOD Add passes `Deck.Validate()` (unit test)
     - `dotnet build app/Atb.sln` passes with the placement choice on `GebodForm` and Tools > GEBOD merging into the open deck
   caution: true
-  status: in progress
+  status: done
 
 - task: Full Windows end-to-end pass — add a GEBOD scenario to `Atb.App.UiTests` (File > New → Tools >
     GEBOD, 50th-percentile adult male, Add as new body → Save → Run to completion, screenshots each step)
