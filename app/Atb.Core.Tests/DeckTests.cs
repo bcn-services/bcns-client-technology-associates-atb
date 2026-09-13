@@ -80,4 +80,43 @@ public class DeckTests
         Assert.Equal("", d.Lines[2].Card);
         Assert.Equal(4, d.Lines[2].Count);
     }
+
+    [Fact]
+    public void FormatIssues_OneBadTokenCount_OneRow()
+    {
+        var issues = Deck.Parse("\"x\"    CARD A.1.a\n2    36    35    CARD H.4\n").Validate();
+        Assert.Equal(new[] { "line 2 (H.4): expected 1 + 2 x Count tokens, found 3 tokens" }, DeckIssue.Format(issues));
+    }
+
+    [Fact]
+    public void FormatIssues_NoIssues_Empty() => Assert.Empty(DeckIssue.Format(new List<DeckIssue>()));
+
+    static List<DeckIssue> Issues(int n) => Enumerable.Range(1, n).Select(k => new DeckIssue(k, "B.1", "bad")).ToList();
+
+    [Fact]
+    public void FormatIssues_Exactly20_NoMoreRow()
+    {
+        var rows = DeckIssue.Format(Issues(20));
+        Assert.Equal(20, rows.Count);
+        Assert.Equal("line 20 (B.1): bad", rows[^1]);
+    }
+
+    [Fact]
+    public void FormatIssues_21_Caps20PlusMoreRow()
+    {
+        var rows = DeckIssue.Format(Issues(21));
+        Assert.Equal(21, rows.Count);
+        Assert.Equal("line 20 (B.1): bad", rows[19]);
+        Assert.Equal("... and 1 more", rows[20]);
+    }
+
+    [Fact]
+    public void Validate_DoesNotAlterDeck()
+    {
+        const string text = "\"x\"    CARD A.1.a\n2    36    35    CARD H.4\n";
+        var d = Deck.Parse(text);
+        var before = d.Write();
+        DeckIssue.Format(d.Validate());
+        Assert.Equal(before, d.Write());
+    }
 }

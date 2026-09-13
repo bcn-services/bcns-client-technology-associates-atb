@@ -233,7 +233,16 @@ public sealed class Deck
     }
 }
 
-public sealed record DeckIssue(int Line, string Label, string Reason);
+public sealed record DeckIssue(int Line, string Label, string Reason)
+{
+    /// One "line N (label): reason" row per issue, at most `max` rows plus a trailing "... and N more" row.
+    public static List<string> Format(IReadOnlyList<DeckIssue> issues, int max = 20)
+    {
+        var rows = issues.Take(max).Select(i => $"line {i.Line} ({i.Label}): {i.Reason}").ToList();
+        if (issues.Count > max) rows.Add($"... and {issues.Count - max} more");
+        return rows;
+    }
+}
 
 public sealed record PasteResult(List<DeckLine> Lines, List<string> Rejected)
 {

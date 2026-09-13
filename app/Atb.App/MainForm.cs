@@ -283,19 +283,20 @@ public sealed class MainForm : Form
         if (deck == null) return;
         if (deckPath == null) { SaveAs(); return; }
         grid.EndEdit();
-        if (!DeckValid(ask: true)) return;
-        deck.Save(deckPath); dirty = false; status.Text = $"Saved {deckPath}";
+        if (!DeckValid("Save")) return;
+        Write();
     }
+    void Write() { deck!.Save(deckPath!); dirty = false; status.Text = $"Saved {deckPath}"; }
 
-    /// Deck.Validate before the deck reaches the solver: Run stops on any issue; Save asks, so edits are never trapped unsaved.
-    bool DeckValid(bool ask)
+    /// Deck.Validate before the deck is written or reaches the solver. Warn-only: a validator false positive
+    /// must never block a deck the solver would accept, so Save and Run both offer Continue (OK) / Cancel.
+    bool DeckValid(string action)
     {
         var issues = deck!.Validate();
         if (issues.Count == 0) return true;
-        var text = "The solver will reject or misread this deck:\n\n" + string.Join("\n", issues.Take(20).Select(i => $"line {i.Line}  {i.Label}: {i.Reason}"))
-                 + (issues.Count > 20 ? $"\n... and {issues.Count - 20} more" : "");
-        if (!ask) { MessageBox.Show(this, text, "Run ATB", MessageBoxButtons.OK, MessageBoxIcon.Warning); return false; }
-        return MessageBox.Show(this, text + "\n\nSave anyway?", "Save", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes;
+        var text = "The solver will reject or misread this deck:\n\n" + string.Join("\n", DeckIssue.Format(issues))
+                 + $"\n\nOK to {action.ToLowerInvariant()} anyway, Cancel to go back.";
+        return MessageBox.Show(this, text, action, MessageBoxButtons.OKCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) == DialogResult.OK;
     }
     void SaveAs()
     {
@@ -320,8 +321,8 @@ public sealed class MainForm : Form
     {
         if (deck == null || deckPath == null) { status.Text = "Open a deck first."; return Task.CompletedTask; }
         grid.EndEdit();
-        if (!DeckValid(ask: false)) return Task.CompletedTask;
-        if (dirty) Save();
+        if (!DeckValid("Run")) return Task.CompletedTask;
+        if (dirty) Write(); // already validated above; Save() would ask a second time
         return RunSolver(SolverMode.RunLin, deckPath);
     }
 
