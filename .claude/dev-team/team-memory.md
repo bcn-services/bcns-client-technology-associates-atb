@@ -69,3 +69,10 @@
 - **What worked:** Literal-string asserts for 0/1/20/21 issues; orchestrator mutation (drop line number) reddened exactly the 3 new formatter tests and nothing else.
 - **What failed:** none
 - **Remember next run:** The `done when:` naming Convert was N/A — plan criteria that name UI paths without an open deck should be checked against the code before the lane is written. Dialog not exercised on Windows; build-only verification for MainForm.
+
+## 2026-09-12 19:10 — dev-team-auto — Round 1b Windows UI test robot
+- **Outcome:** DONE — 1 attempt — caution: no — team: dt-engineer (opus/high) — r1b-run-overwrite, 5d255d5 (code da65bef)
+- **What happened:** Built app/Atb.App.UiTests (FlaUI, out of Atb.sln) and app-e2e.yml (calls windows-build.yml via workflow_call). Green run https://github.com/bcn-services/bcns-client-technology-associates-atb/actions/runs/34731451037, 4 of 8 pushes: 12 edit+Save decks pass the single-token diff, CROSS PASS on 2479_2 (app vs direct, 9 files), 13 .sa1 files viewed with no dialog, 140 screenshots under shots/<scenario>/. The engineer stopped twice while a CI run was pending and had to be resumed.
+- **What worked:** tokendiff.py and cross_gate.py as small gate scripts, mutation-checked locally. The truncated-.sa1 control scenario proves the dialog detector trips. The Save dialog path is typed by keyboard.
+- **What failed:** A segment-only insert passes Deck.Validate but the solver stops at STOP 24 (it wants one joint per extra segment, so it is one G.2 card short). The robot inserts segment and joint together. Human decision: should a segment insert add a joint, or should Validate reject the deck?
+- **Remember next run:** Gebodv.exe fails without C:\ATBFIG.SYS (exit -1073741795, "file not found, unit 7"). With the file it exits 0 and writes GEBOD.ain, now at app/Atb.Core.Tests/fixtures/gebod-50m.ain. The app-e2e artifact is `app-e2e`. When briefing a background engineer, tell it to block on `gh run watch` in the foreground and never return while a run is pending.
