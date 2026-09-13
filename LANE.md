@@ -199,7 +199,7 @@ Context: `README.md` (solver, verification), `docs/TIER2-SCOPE.md` (feature list
   done when:
     - An `Atb.Core` function formats `Deck.Validate()` results as one "line N (label): reason" row each, unit-tested on a deck with one bad token count
     - `dotnet build app/Atb.sln` passes with the check wired before Save, Save As, Run and Convert
-  status: not started
+  status: done
 
 - task: Windows UI test robot. New project `app/Atb.App.UiTests/` (`net8.0-windows`, xunit, `FlaUI.UIA3`),
     kept out of `Atb.sln`. New `.github/workflows/app-e2e.yml` (`windows-2022`, `workflow_dispatch`):
