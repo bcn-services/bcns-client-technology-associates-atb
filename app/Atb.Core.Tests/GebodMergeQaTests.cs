@@ -55,10 +55,10 @@ public class GebodMergeQaTests
         var o = D2479();
         var d = GebodMerge.Merge(o, Ain, new(mode, body), _ => true);
         Labeler.Label(o); Labeler.Label(d);
-        var oSeg = o.Cards("B.2.A").Select(l => l.Raw).ToList();
-        var dSeg = d.Cards("B.2.A").Select(l => l.Raw).ToList();
-        var oJnt = o.Cards("B.3.A").Select(l => l.Str(0)).ToList();
-        var dJnt = d.Cards("B.3.A").Select(l => l.Str(0)).ToList();
+        var oSeg = o.Cards("B.2.A").Select(l => l.Raw ?? "").ToList();
+        var dSeg = d.Cards("B.2.A").Select(l => l.Raw ?? "").ToList();
+        var oJnt = o.Cards("B.3.A").Select(l => l.Str(0) ?? "").ToList();
+        var dJnt = d.Cards("B.3.A").Select(l => l.Str(0) ?? "").ToList();
         string[] skipCards = ["B.1", "B.2.A", "B.2.B", "B.3.A", "B.3.B", "B.4.A", "B.4.B", "B.5.A", "B.5.B", "B.5.C", "B.6", "G.3.A", "G.2", "D.7", "F.3.A", "F.4.A"];
         int checkedRefs = 0;
         var families = new HashSet<string>();
@@ -87,6 +87,63 @@ public class GebodMergeQaTests
         }
         Assert.True(checkedRefs > 20, $"only {checkedRefs} refs checked");
         Assert.Contains("H", families); Assert.Contains("B", families.Append("B"));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void ReplaceDecline_LeavesDeckByteIdentical_AndConfirmIsAskedOnce(int body)
+    {
+        var o = D2479();
+        var before = o.Write();
+        int asked = 0;
+        Assert.Throws<OperationCanceledException>(() => GebodMerge.Merge(o, Ain, new(GebodMode.Replace, body), _ => { asked++; return false; }));
+        Assert.Equal(1, asked);
+        Assert.Equal(before, o.Write());
+        asked = 0;
+        GebodMerge.Merge(o, Ain, new(GebodMode.Replace, body), _ => { asked++; return true; });
+        Assert.Equal(1, asked);
+        Assert.Equal(before, o.Write());
+    }
+
+    /// Independent oracle: scan the original deck by schema kind for every seg/joint/ellipsoid ref token outside the
+    /// replaced body's own B/G.3 rows that points into the deleted range; the confirm list must name exactly those lines.
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void ReplaceConfirmList_CoversEveryRefIntoTheReplacedBody(int body)
+    {
+        var o = D2479();
+        Labeler.Label(o);
+        var starts = GebodMerge.BodyStarts(o);
+        int nseg = o.Cards("B.2.A").Count(), njnt = o.Cards("B.3.A").Count();
+        int a = starts[body - 1], b = body < starts.Count ? starts[body] - 1 : nseg;
+        int j0 = a > 1 ? a - 1 : 1, j1 = a > 1 ? b - 1 : Math.Min(b, njnt);
+        string[] own = ["B.1", "B.2.A", "B.2.B", "B.3.A", "B.3.B", "B.4.A", "B.4.B", "B.5.A", "B.5.B", "B.5.C", "B.6", "D.7", "F.3.A", "F.4.A", "F.7.A"];
+        var g3 = o.Cards("G.3.A").ToList();                                // G.3.a rows a..b go with their segments; others' Ref Segment counts
+        var want = new SortedSet<int>();
+        for (int li = 0; li < o.Lines.Count; li++)
+        {
+            var l = o.Lines[li];
+            if (l.Card.Length == 0 || own.Contains(l.Card.ToUpperInvariant())) continue;
+            int gi = g3.IndexOf(l);
+            if (gi >= 0 && gi + 1 >= a && gi + 1 <= b) continue;
+            int sk = CardSchema.Skip(l.Card, l.Count);
+            for (int i = 0; i < l.Count; i++)
+            {
+                var kind = CardSchema.KindOf(l.Card, i + sk);
+                if (!int.TryParse(l.Tokens[i], out var v) || v == 0) continue;
+                int av = Math.Abs(v);
+                if ((kind is Kind.SegRef or Kind.EllipRef && av >= a && av <= b) || (kind == Kind.JointRef && av >= j0 && av <= j1)) want.Add(li + 1);
+            }
+        }
+        IReadOnlyList<RefSite>? got = null;
+        var d = GebodMerge.Merge(o, Ain, new(GebodMode.Replace, body), s => { got = s; return true; });
+        var gotLines = new SortedSet<int>(got?.Select(s => s.Line) ?? []);
+        Assert.True(want.SetEquals(gotLines), $"body {body}: schema scan {string.Join(",", want)}; confirm list {string.Join(",", gotLines)}; missing {string.Join(",", want.Except(gotLines))}; extra {string.Join(",", gotLines.Except(want))}");
+        // what actually disappears: each listed line's original text is gone from the merged deck
+        var after = d.Lines.Select(x => x.Raw).ToHashSet();
+        foreach (var ln in gotLines) Assert.True(!after.Contains(o.Lines[ln - 1].Raw), $"line {ln} '{o.Lines[ln - 1].Raw}' survived the Replace unchanged");
     }
 
     /// Solver input checks on the merged decks (src/Chain.for, input_bcards.for, G.2 per body).
