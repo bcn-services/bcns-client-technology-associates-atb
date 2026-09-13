@@ -166,7 +166,7 @@ Context: `README.md` (solver, verification), `docs/TIER2-SCOPE.md` (feature list
     - `Finish` copies to the given destination dir and base rather than the deck's dir, and Convert writes `<chosen>.lin` (unit test)
     - Flipping the success gate, or ignoring the destination dir, makes a test fail (mutation checks recorded in the item report)
     - `dotnet build app/Atb.sln` passes with the Save dialog wired into Run and Convert
-  status: not started
+  status: done
 
 - task: Close the renumbering gaps item 6 left open, following ATB 3I's `ATB3I.Util/ATBUpdate.cs` except
     where 3I leaves a reference stale. (1) Keep renumbering H.1–H.9 (3I never touches H tables,
