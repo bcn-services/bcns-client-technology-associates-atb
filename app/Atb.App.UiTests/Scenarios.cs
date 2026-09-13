@@ -222,14 +222,19 @@ public class Scenarios
 
     /// Camera-list name (as AnimationForm lists them) of the entry with the largest first→last frame displacement,
     /// among entries whose name is unique and non-empty (so a click by name selects that entry). Null for &lt; 2 frames.
+    static readonly string[] Torso = ["CT", "UT", "LT"];
     static string? Mover(Sa1File s)
     {
         if (s.Frames.Count < 2) return null;
         // body segments only (vehicles/planes are "Entry N"): the follow camera should track the occupant
         var names = s.Segments.Select(g => g.Name.Trim()).ToList();
         return Enumerable.Range(0, Math.Min(s.NGnd, names.Count))
-            .Where(i => names[i].Length > 0 && names.Count(x => x == names[i]) == 1 && names[i] != "View all (fixed)")
-            .OrderByDescending(i => System.Numerics.Vector3.Distance(s.Frames[0].Position(i), s.Frames[^1].Position(i)))
+            // two occupants repeat every name (2495_2, 2696_3: 2x17); Choose selects a name's first item, so rank only that one
+            .Where(i => names[i].Length > 0 && names.IndexOf(names[i]) == i && names[i] != "View all (fixed)")
+            // the 3I segment camera turns with its segment (decomp Animation.cs:1476, Upward=0 FileManager.cs:2825), so a
+            // limb/head follow swings behind floor/wall planes; the torso turns least. Else the entry that travels furthest.
+            .OrderBy(i => Array.IndexOf(Torso, names[i]) is var t && t >= 0 ? t : Torso.Length)
+            .ThenByDescending(i => System.Numerics.Vector3.Distance(s.Frames[0].Position(i), s.Frames[^1].Position(i)))
             .Select(i => names[i]).FirstOrDefault();
     }
 
