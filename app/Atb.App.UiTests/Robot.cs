@@ -145,9 +145,9 @@ public sealed class Robot : IDisposable
     {
         var d = Until(() => Dialog(title), 30, $"'{title}' dialog");
         var box = Until(() => d.FindFirstDescendant(Cf.ByControlType(ControlType.Edit).And(Cf.ByName("File name:"))), 10, "File name box");
-        box.Focus();
-        if (box.Patterns.Value.PatternOrDefault is { } v) v.SetValue(path);
-        if (Value(box) != path) { Press(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A); Keyboard.Type(path); }
+        // Typed, not ValuePattern.SetValue: the Save dialog keeps its preset FileName when the box text is set via UIA.
+        box.Focus(); Press(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A); Keyboard.Type(path); Wait.UntilInputIsProcessed();
+        if (Value(box) != path) throw new InvalidOperationException($"'{title}' File name box holds '{Value(box)}', not '{path}'");
         Shot(title.Replace(' ', '-').ToLowerInvariant() + "-dialog");
         box.Focus(); Keyboard.Type(VirtualKeyShort.RETURN); Wait.UntilInputIsProcessed();
         UntilTrue(() => Dialog(title) == null, 15, $"'{title}' dialog closed");

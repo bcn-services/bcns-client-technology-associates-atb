@@ -78,10 +78,12 @@ jobs:
           W="$(cygpath -u "$WORK")/direct"; mkdir -p "$W/2479_2"; E="$PWD/atb-win32.exe"
           cp cases/2479/2479_2.LIN "$W/2479_2/2479_2.lin"
           t0=$(date +%s)
-          ( cd "$W/2479_2" && printf 'y\n\nl\n2479_2\n2479_2\n' | "$E" > 2479_2.term.log 2>&1 ); rc=$?
+          rc=0   # bash -e: the solver's normal STOP 1 must not end the step
+          ( cd "$W/2479_2" && printf 'y\n\nl\n2479_2\n2479_2\n' | "$E" > 2479_2.term.log 2>&1 ) || rc=$?
           # keep what SolverJob.IsOutputExt keeps, renamed as the app's Save dialog names them
           for f in "$W"/2479_2/2479_2.*; do
-            x="${f##*.}"; echo "$x" | grep -qiE '^(aou|sa1|dbg|tp1|st1|st2|t[0-9][0-9])$' && mv "$f" "$W/2479_2/2479_2_new.$x"
+            x="${f##*.}"
+            if echo "$x" | grep -qiE '^(aou|sa1|dbg|tp1|st1|st2|t[0-9][0-9])$'; then mv "$f" "$W/2479_2/2479_2_new.$x"; fi
           done
           echo "2479_2 2479 2479_2 2479_2 $rc $(( $(date +%s) - t0 ))" > "$W/cases.txt"
           cat "$W/cases.txt"; ls "$W/2479_2"
