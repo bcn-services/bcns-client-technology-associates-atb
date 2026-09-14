@@ -121,9 +121,7 @@ public static class Renumber
         int num = Number(d, e, n);
         var kinds = Kinds(e);
         var cascade = Cascade(e);
-        var acts = cascade.ContainsKey("F.10")                        // F.10 positions the cascade removes
-            ? d.Cards("F.10").Select((l, i) => (l, i + 1)).Where(x => Marked(x.l, kinds).Any(i => Ref(x.l, i, x.l.Tokens[i]) == num)).Select(x => x.Item2).ToList()
-            : new List<int>();
+        var acts = CascadedActuators(d, e, n);
         var refs = References(d, e, n);
         if (H11Emptied(d, e == Entity.Actuator ? [n] : acts) is { } warn) refs.Add(warn);
         if (refs.Count > 0 && !confirm(refs)) return null;
@@ -163,9 +161,18 @@ public static class Renumber
         return data;
     }
 
+    /// F.10 positions (actuators) Delete(e, n) cascades; their H.11 entries go with them.
+    internal static List<int> CascadedActuators(Deck d, Entity e, int n)
+    {
+        if (!Cascade(e).ContainsKey("F.10")) return [];
+        int num = Number(d, e, n);
+        var kinds = Kinds(e);
+        return d.Cards("F.10").Select((l, i) => (l, i + 1)).Where(x => Marked(x.l, kinds).Any(i => Ref(x.l, i, x.l.Tokens[i]) == num)).Select(x => x.Item2).ToList();
+    }
+
     /// Confirm-list entry when removing actuators lost leaves H.11 with no entry while actuators remain: Unref writes
     /// Count 0 and the solver stops (input_h11_cards.for:36-41 STOP 741); Deck.Validate flags the result.
-    static RefSite? H11Emptied(Deck d, List<int> lost)
+    internal static RefSite? H11Emptied(Deck d, List<int> lost)
     {
         int li = d.Lines.FindIndex(l => l.Is("H.11"));
         if (li < 0 || lost.Count == 0 || d.Card("D.1.B") is not { Count: > 0 } b || Num(b.Tokens[0]) is not int nr || nr - lost.Count < 1) return null;

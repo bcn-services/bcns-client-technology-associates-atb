@@ -34,8 +34,9 @@ public static class GebodMerge
         return starts;
     }
 
-    /// Body k's segments a..a+S-1 and its joints j..j+J-1: its own NULL joint a-1 then a..b-1, so J = S; body 1 has no
-    /// NULL joint (1..b-1, J = S-1) and the next body's NULL joint b is not one of its joints.
+    /// Body k's segments a..b-1 (b = the next body's first segment, or NSEG+1) and its joints j..j+J-1: its own NULL
+    /// joint a-1 then a..b-2, so J = S; body 1 has no NULL joint (1..b-2, J = S-1). The next body's NULL joint b-1 is
+    /// not one of its joints (3I's DeleteBody counts it; STANDARDS.md "ATB 3I divergences").
     static (int A, int S, int J, int Jn) BodyRange(Deck d, int k)
     {
         var starts = BodyStarts(d);
@@ -46,7 +47,8 @@ public static class GebodMerge
     }
 
     /// Every field outside body k that Replace with a newSegments-segment GEBOD body drops: the ones naming a surplus
-    /// position, a segment or joint of the old body past the new body's count (Renumber.Delete cascades or blanks them).
+    /// position, a segment or joint of the old body past the new body's count (Renumber.Delete cascades or blanks them),
+    /// plus the H.11 entries of the F.10 actuators that cascade takes with it (and H.11's STOP 741 warning when it empties).
     /// References to the kept positions name the new body's segment or joint at the same position and are not listed.
     public static List<RefSite> ReplacedReferences(Deck d, int body, int newSegments)
     {
@@ -55,9 +57,12 @@ public static class GebodMerge
         var own = Enumerable.Range(a, so).Select(s => (Entity.Segment, s)).Concat(Enumerable.Range(j, jo).Select(x => (Entity.Joint, x)))
             .SelectMany(x => Renumber.Owned(d, x.Item1, x.Item2).SelectMany(g => g)).ToHashSet();
         var surplus = Enumerable.Range(j + jn, Math.Max(jo - jn, 0)).Select(x => (Entity.Joint, x))
-            .Concat(Enumerable.Range(a + newSegments, Math.Max(so - newSegments, 0)).Select(s => (Entity.Segment, s)));
-        return surplus.SelectMany(x => Renumber.References(d, x.Item1, x.Item2))
-            .Where(s => !own.Contains(d.Lines[s.Line - 1])).Distinct().OrderBy(s => s.Line).ToList();
+            .Concat(Enumerable.Range(a + newSegments, Math.Max(so - newSegments, 0)).Select(s => (Entity.Segment, s))).ToList();
+        var acts = surplus.SelectMany(x => Renumber.CascadedActuators(d, x.Item1, x.Item2)).Distinct().ToList();
+        var sites = surplus.SelectMany(x => Renumber.References(d, x.Item1, x.Item2))
+            .Concat(acts.SelectMany(x => Renumber.References(d, Entity.Actuator, x))).ToList();
+        if (Renumber.H11Emptied(d, acts) is { } warn) sites.Add(warn);
+        return sites.Where(s => !own.Contains(d.Lines[s.Line - 1])).Distinct().OrderBy(s => s.Line).ToList();
     }
 
     /// ATB 3I Replace (GEBOD.cs:1766-1800 update list, ATBUpdate.UpdateDueToBody / UpdateOtherTable): the old body's
@@ -80,13 +85,14 @@ public static class GebodMerge
         return d;
     }
 
-    /// Entity n's own lines, group by group, become data's (no reference anywhere changes).
+    /// Entity n's own lines, group by group, become data's (no reference anywhere changes). Every group is one per
+    /// segment / joint in the schema (B.2, B.6, G.3.A; B.3-B.5), so a missing one is a malformed deck, not skipped.
     static void Swap(Deck d, Entity e, int n, EntityData data)
     {
         var old = Renumber.Owned(d, e, n);
         for (int g = 0; g < old.Count && g < data.Groups.Count; g++)
         {
-            if (old[g].Count == 0) continue;
+            if (old[g].Count == 0) throw new InvalidOperationException($"{e} {n} has no {data.Groups[g][0].Card} line; the deck needs one per {e.ToString().ToLowerInvariant()}.");
             int at = d.Lines.IndexOf(old[g][0]);
             d.Lines.RemoveAll(old[g].Contains);
             d.Lines.InsertRange(at, data.Groups[g]);

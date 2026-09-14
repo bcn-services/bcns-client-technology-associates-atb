@@ -259,15 +259,6 @@ public sealed class MainForm : Form
     bool ConfirmReplace() =>
         MessageBox.Show(this, GebodForm.ReplaceText, "Replace Body Using GEBOD", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
 
-    /// After the run, only when the new body is shorter and references to the surplus positions would be dropped
-    /// (3I drops them without a list; the count is not known before GEBOD runs).
-    bool ConfirmDropped(IReadOnlyList<RefSite> refs)
-    {
-        var (count, list) = RefList(refs);
-        var text = $"The GEBOD body has fewer segments than the body it replaces. These {count} line(s) refer to the surplus segments or joints and lose that reference:\n\n{list}\n\nContinue?";
-        return MessageBox.Show(this, text, "GEBOD", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes;
-    }
-
     /// A GEBOD run that could not be merged: offer to keep its output so the user need not rerun GEBOD.
     void OfferSaveAin(string ain, string why)
     {
@@ -500,8 +491,8 @@ public sealed class MainForm : Form
         { OfferSaveAin(ain!, $"The deck had {bodies} bodies when GEBOD started and has {now} now, so the chosen placement is out of date. The deck is unchanged."); return; }
         Deck merged;
         // Works on a copy: a failure leaves the open deck as it was.
-        try { merged = GebodMerge.Merge(target, ain!, place, ConfirmDropped); }
-        catch (OperationCanceledException) { OfferSaveAin(ain!, "Replace cancelled. The deck is unchanged."); return; }
+        // ATB 3I asks only Body.cs:1049 (ConfirmReplace, before the run); ATBUpdate drops surplus refs without a list.
+        try { merged = GebodMerge.Merge(target, ain!, place, _ => true); }
         catch (Exception ex) { OfferSaveAin(ain!, "GEBOD output could not be merged: " + ex.Message); return; }
         if (deck == null) deckPath = null;
         deck = merged; dirty = true;
