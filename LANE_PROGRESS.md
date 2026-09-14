@@ -4,15 +4,28 @@ LANE.md is the contract; this tracks where we are in it — if they disagree, LA
 
 ## Current position
 
-- **Status:** Round 1b finished — all 6 items done, none blocked; 262 tests pass on macOS, and the Windows robot passes every scenario on GitHub's Windows machines (run 34735611144, 165 screenshots checked).
-- **Lane acceptance (2026-09-12, `.claude/dev-team/lane-acceptance-report-r1b.md`):**
-  - Goal 1, open → edit → save: met.
-  - Goal 2, the app's Run matches the reference outputs: partly met. The app's run matches a direct solver run exactly, but the outputs drift from the reference files after about 0.4 s, and `cmp.py` never fails, so this goal can't fail as written.
-  - Goal 3, the viewer plays every `.sa1`: met.
-  - Goal 4, macOS tests and a Windows build: partly met. macOS passes. The Windows build hasn't run on this round's code, and it runs when `tier2-app` is pushed to the PR.
-- **Next:** Nate's Windows VM click-through (checklist below), then the decisions listed under Blockers.
-- **Blockers:** Decisions for Nate. (1) A deck made with File > New has 0 time steps, as in ATB 3I, so New → GEBOD → Run writes no animation file; keep 3I's default or give File > New a runnable step count. (2) Inserting a segment on its own passes the app's check but the solver stops (STOP 24); make Insert-segment add a joint too, or make the check reject it. (3) GEBOD Replace drops references into the old body where ATB 3I points them at the new one. (4) GEBOD needs `C:\ATBFIG.SYS`, which a normal Windows user may not be able to write; the VM pass checks this as a standard user. (5) The follow camera rides the torso as in ATB 3I, so a wall or floor can hide the body in 3 frames. (6) Lane goal 2 compares against reference outputs, but the solver's numbers vary by computer, so the robot compares the app's run with a direct run instead; the goal's wording should say that. (7) Still open from round 1: the labeler item says three mislabelled `H.1.a` rows but there is one; confirm what "Z up on screen" meant; D.4 holds no segment reference, so nothing there shifts.
-- **Last updated:** 2026-09-12
+- **Status:** Round 2 (v1: every ATB 3I screen plus the installer) started; session S1 is building GEBOD Replace, the segment/joint warning, Body Summary and the Maximum Value List.
+- **Next:** the four S1 items, then S2 — Vehicle Motion and the function editors (`docs/HANDOFF-PLAN.md`).
+- **Blockers:** none. Round 1b's seven open questions are settled by the decisions in `docs/HANDOFF-PLAN.md` (copy ATB 3I).
+- **Last updated:** 2026-09-14
+
+## Round 2 — v1: full ATB 3I parity + installer
+
+| Item | Status |
+|------|--------|
+| GEBOD Replace follows ATB 3I | not started |
+| Segment and joint insert/delete warning | not started |
+| Body Summary screen | not started |
+| Maximum Value List screen | not started |
+| Vehicle Motion list and sub-editors | skipped — below stop marker |
+| Function editors | skipped — below stop marker |
+| Run Control form | skipped — below stop marker |
+| Output Control Parameters | skipped — below stop marker |
+| HIC and CSI Definition | skipped — below stop marker |
+| Weight Balancing probe | skipped — below stop marker |
+| Weight Balancing screens | skipped — below stop marker |
+| Installer | skipped — below stop marker |
+| Robot sweep | skipped — below stop marker |
 
 ## Windows VM click-through (Nate, before anything goes to the client)
 
@@ -38,7 +51,9 @@ The cloud robot proves the paths it scripts. This pass covers what it can't: dia
 - [ ] File > New → Tools > GEBOD → 50th-percentile adult male → Add as new body → Save → Run: it finishes. **As the standard user:** note whether GEBOD errors writing `C:\ATBFIG.SYS`.
 - [ ] Open `2479_2.LIN` → GEBOD → Replace body 1: one confirmation lists what will be removed; No leaves the deck unchanged; Yes merges and the deck runs.
 
-## Round 1b — acceptance-review fixes
+## Round 1b — acceptance-review fixes (shipped 2026-09-12)
+
+Lane acceptance (`.claude/dev-team/lane-acceptance-report-r1b.md`): open → edit → save met; the app's Run matches a direct solver run exactly, though outputs drift from the reference files after about 0.4 s (partly met as worded); viewer met; macOS tests pass. 262 tests; Windows robot run 34735611144, 165 screenshots checked.
 
 | Item | Status |
 |------|--------|
@@ -49,7 +64,7 @@ The cloud robot proves the paths it scripts. This pass covers what it can't: dia
 | Merge GEBOD output into the open deck | done — Tools > GEBOD now adds its body to the open deck (as a new body, before or after a body, or replacing one), File > New makes an empty deck to start from, and every merged deck runs in the solver. |
 | Full Windows end-to-end pass | done — Every scenario, including File > New → GEBOD → Save → Run, now passes on GitHub's Windows machines, and all 165 screenshots were checked; the viewer's follow-the-body camera now appears in each animation check. |
 
-## Round 1 — core model, generic editor, run, viewer
+## Round 1 — core model, generic editor, run, viewer (shipped 2026-09-12)
 
 | Item | Status |
 |------|--------|

@@ -1,20 +1,19 @@
-# Tier 2 desktop app — round 1 (core model, generic editor, run, viewer)
+# Tier 2 desktop app — round 2 (v1: full ATB 3I parity + installer)
 
 ## Objective
 
-A Windows app that opens a client `.LIN`, edits any card in a grid, runs the solver, and animates the
-resulting `.sa1`, replacing ATB 3I for the everyday edit → run → view loop.
+Every screen in `docs/TIER2-SCOPE.md` §2, Weight Balancing included, matches ATB 3I, and one setup `.exe`
+installs it — v1, the build Nate tests before anything goes to the client.
 
 Lane done when:
-- Open then Save of every deck under `cases/` writes the file back byte-for-byte, and a value edited in a grid lands on that card in the saved file
-- Run from the app on `cases/2479/2479_2.LIN` produces `.aou`, `.sa1`, `.t2x` that `verify/cmp.py` accepts against the reference outputs
-- The viewer plays every `cases/**/*.sa1` and `example/sledout.sa1` with segments, planes, contact ellipsoids, and belts drawn
-- `dotnet test app/Atb.sln` passes on macOS and `dotnet build app/Atb.sln` passes on the `windows-2022` runner
+- One green `app-e2e.yml` run opens every §2 screen (1–38) from the menu on the client decks, with a screenshot of each
+- In that run, Run through the app on `cases/2479/2479_2.LIN` yields `.aou/.sa1/.t2x` identical to a direct `atb-win32.exe` run of the same deck on the same machine (`cross_gate.py`; the solver's numbers vary by CPU, so the reference outputs are a report, not the gate)
+- The setup `.exe` installs on the `windows-2022` runner and every robot scenario passes against the installed app
+- `PATH="$HOME/atb-work/dotnet:$PATH" dotnet test app/Atb.sln` passes on macOS
 
-Status: round 1's seven items are done (200 tests pass). Round 1b fixes what the lane acceptance
-review found (`.claude/dev-team/lane-acceptance-report.md`): Run overwrites reference outputs, GEBOD
-output is never merged, renumbering gaps, and nothing has run on Windows. Scope and stack decision:
-`docs/TIER2-SCOPE.md`.
+Status: rounds 1 and 1b are done (card schema, labeler, grid, run, viewer, renumbering, GEBOD, Windows robot;
+see `LANE_PROGRESS.md`). Round 2 builds the remaining §2 screens, Weight Balancing and the installer, one
+session per block in `docs/HANDOFF-PLAN.md` (S1–S5).
 
 Global rules:
 - `Atb.Core` stays free of UI and database dependencies; everything in it must build and test on macOS
@@ -24,287 +23,231 @@ Global rules:
 - Run the tests with `PATH="$HOME/atb-work/dotnet:$PATH" dotnet test app/Atb.sln`
 - Agents run on macOS and cannot launch the Windows app locally. Every `done when:` is a compile check,
   an `Atb.Core.Tests` unit test, or a green `app-e2e.yml` run on `windows-2022` dispatched with
-  `GITHUB_TOKEN= gh workflow run <file> --ref <branch>` and read with `GITHUB_TOKEN= gh run view` /
+  `GITHUB_TOKEN= gh workflow run app-e2e.yml --ref <branch>` and read with `GITHUB_TOKEN= gh run view` /
   `gh run download`. Pushing a non-`main` branch to `origin` for that is allowed; never push `main`, never
-  force-push. A `Human check:` line under a task is Nate's by-eye pass on the CI artifact and is not gated
-  by QA. Copy ATB 3I's behaviour from the decompile at `~/atb-work/p0/decomp/` rather than redesigning it
-- Where ATB 3I leaves a reference stale, fix it and note the divergence in `STANDARDS.md`
+  force-push, never merge a PR. Use `GITHUB_TOKEN= gh` for every `gh` call. A `Human check:` line under a task
+  is Nate's by-eye pass on the CI artifact and is not gated by QA
+- **Copy ATB 3I exactly** for every design choice: behaviour, labels, dialog texts, defaults, order. Decompile:
+  `~/atb-work/p0/decomp/ATB3I/` and `~/atb-work/p0/decomp/ATB3I.Util/`. Data tables:
+  `~/atb-work/p0/msi/General Dynamics/ATB3I/ATB3iData.mdb`, read with `mdb-export`
+- Three kept extras 3I does not have stay as they are: output-card (H.1–H.9) renumbering, the H.11 actuator fix,
+  and the warning before saving a deck that fails `Deck.Validate()`. Where 3I leaves a reference stale
+  elsewhere, fix it and note the divergence in `STANDARDS.md`
+- Every new screen gets a robot scenario in `app/Atb.App.UiTests/Scenarios.cs` in the item that builds it,
+  screenshotting each step; scenario assertions are never loosened to make a run pass
+- GEBOD keeps 3I's full behaviour, Replace included. `C:\ATBFIG.SYS` (work folder `C:\Users\Public\ATBRun`,
+  format pinned by `GebodTests.AtbFig_MatchesInstallerLayout`) is written once by the installer, as 3I's
+  installer did; once the installer item lands, the app never writes to `C:\` itself
+- File > New keeps 3I's 0 time steps. The follow camera stays on the torso, as 3I
+- Weight Balancing runs the client's original solver, `frontend/bin/ATBV3_ATB3I.exe` (exe B in
+  `frontend/FIDELITY.md`), through 3I's handoff (`SolverRun` `FeedMode.Handoff`: `C:\ATBFIG.SYS` names the handoff
+  folder, the deck goes there as `winintm.sys`, `EXECATB.DAT` holds the single line `99`). Every other run keeps
+  using `atb-win32.exe`. No balance code is ever written into `src/`; the pose math lives in the app
 
-Context: `README.md` (solver, verification), `docs/TIER2-SCOPE.md` (feature list, risks),
-`frontend/ATBRunner/` (QA runner the solver-run code came from).
+Context: `docs/HANDOFF-PLAN.md` (sessions, decisions), `docs/TIER2-SCOPE.md` (screen list, risks),
+`STANDARDS.md` (divergences from 3I), `frontend/FIDELITY.md` (exe B gates), `README.md` (solver, verification).
 
 ---
 
-- task: Card schema for every `.LIN` card in `Atb.Core/Cards/CardSchema.cs` — for each `CARD x.y`
-    label the ordered field names, field kinds (string / int / real / segment-ref / joint-ref /
-    plane-ref / function-ref), and the condition under which the card appears (e.g. `B.2.b` only
-    when `B.2.a` field 12 is 1; `D.2` count from `D.1`). Source: `~/atb-work/p0/pdf/atbusrguide.txt`
-    card descriptions, cross-checked against the Access column lists (schema column order is card
-    token order) and the 12 client decks. Extend the seed dictionary already in the file.
-  guardrails:
-    - Field names match the ATB 3I column titles where one exists, so the client sees familiar labels
-    - Do not invent fields to make a deck fit; a deck line that disagrees with the guide is a test failure to investigate
-  done when:
-    - Every labelled line in every `cases/**/*.LIN` has a schema entry and its token count equals the schema's field count (or a documented variable-length rule)
-    - Every card the scope table in `docs/TIER2-SCOPE.md` §2 names has a schema entry
-    - A `Deck.Validate()` reports label, line number, and reason for each mismatch, and reports nothing for the 12 client decks
-    - Existing passing tests remain passing
-  status: done
+### S1 — GEBOD Replace, lone-segment warning, Body Summary, Maximum Value List
 
-- task: Deck labeler for unlabelled or mislabelled decks — a grammar walk in `Atb.Core/Lin` that
-    assigns `CARD x.y` labels to a bare `.lin` (the vendor samples in
-    `~/atb-work/p0/msi/General Dynamics/Samples/*.lin`) using the schema's counts and conditions,
-    and that corrects ATB 3I's `CARD H.1.a` label on empty `H.2.a`/`H.3.a` rows.
-  guardrails:
-    - Labelled client decks are never relabelled; the labeler only fills blanks and fixes the known H-card bug
-    - A deck the grammar cannot walk raises a clear error naming the last card understood
-  done when:
-    - Every vendor sample labels completely and `Deck.Validate()` reports nothing afterwards
-    - Labelling then saving a client deck changes zero bytes
-    - The three `H.1.a`-mislabelled empty rows in the client decks are relabelled and the saved file is unchanged except for those labels
-  status: done
-
-- task: Generic card grid screen in `Atb.App/MainForm.cs` — one `DataGridView` over
-    all lines of a card (or card group, e.g. `B.2.a` + conditional `B.2.b` as extra columns),
-    column headers and cell types from the schema, add/delete/copy/paste rows, numeric validation
-    with revert, and a card list on the left of the main window that opens each screen from the
-    scope table's menu names.
-    Human check: every scope-table screen opens on the 12 client decks; an Excel paste lands as rows.
-  guardrails:
-    - Editing a cell rewrites only that deck line; the `Deck` stays the single document
-    - Reference columns (segment, joint, plane, function) show the referenced name next to the number but store the number
-  done when:
-    - Setting segment 1's weight through the `Deck` edit API on `cases/2479/2479_2.LIN` and saving differs from the original in exactly that token (unit test)
-    - A `Atb.Core` function turns tab-separated paste text into deck lines carrying the given label, rejecting rows whose token count disagrees with the schema (unit test)
-    - Every distinct card label across the 12 client decks and the vendor fixtures has a schema header for each column (unit test)
-    - `dotnet build app/Atb.sln` passes with add/delete/copy/paste row actions wired in `MainForm`
-  status: done
-
-- task: Run action — File > Run uses `Atb.App/Solver/SolverRun.cs` in a per-run temp directory
-    under a short path, streams solver stdout to a progress window, supports cancel, copies the
-    outputs next to the deck, and offers to open the `.sa1` in the viewer when done. Convert
-    `.ain` → `.lin` (solver mode 102) goes through the same code path.
-    Human check: Run on `cases/2479/2479_2.LIN` yields outputs `verify/cmp.py` accepts; Cancel kills the
-    solver within 2 s; Convert on `example/Sled.ain` opens in the grid.
-  guardrails:
-    - Never write into `System32` or the app's install directory; scratch files live in the temp dir and are removed after the outputs are copied
-    - The UI thread never blocks on the solver
-  done when:
-    - Output collection is an `Atb.Core` function: given a work dir holding `<base>.aou/.sa1/.t2x` it copies them next to the deck path and removes the work dir, and leaves nothing behind when cancelled mid-run (unit test on temp dirs)
-    - The stdin answer sequence for mode 101 (`.lin` run) and mode 102 (`.ain` convert) comes from one `Atb.Core` function, unit-tested against the answers `SolverRun` sends today
-    - `dotnet build app/Atb.sln` passes with the progress window, Cancel, and Convert menu item wired to `SolverRun`
-  status: done
-
-- task: Animation viewer in `Atb.App/Viewer/AnimationForm.cs` + `Sa1Scene.cs` (WPF `Viewport3D` in an
-    `ElementHost`) — segment ellipsoids as scaled unit-sphere meshes under the per-frame transform,
-    contact ellipsoids as superquadrics with ATB 3I's `MakeHyperElip` vertex formula and `MakeCntacElipXFrm`
-    rotation order (both already copied into `Sa1Scene`),
-    planes as two-sided quads, belts as polylines from the per-frame belt tables, play/pause/step/
-    speed controls, per-object visibility and colour (defaults from ATB 3I's `ColorMap`),
-    view-all camera and a segment-mounted camera with the same look-at semantics as ATB 3I (the camera
-    rides under the segment's transform, so it turns with the segment, as `Animation.cs` does).
-    Human check: every `.sa1` plays start to end; sled belts are drawn on frame 0; toggling a segment
-    off and on restores its colour; the segment camera stays centred and turns with the segment.
-  guardrails:
-    - Frame data comes only from `Atb.Core.Sa1`; no re-parsing in the UI
-    - Solver axes map to screen the same way as ATB 3I (Z up on screen)
-  done when:
-    - Every `cases/**/*.sa1` and `example/sledout.sa1` loads with strictly increasing frame times and one transform per segment per frame (unit test)
-    - For `example/sledout.sa1` frame 0, the world positions of both belt strands' points come from one `Atb.Core` function and lie within the sled's bounding box (unit test)
-    - The playback clock maps wall time × speed to a frame index by binary search, in `Atb.Core`, unit-tested at the first, last, and a mid-file time
-    - `dotnet build app/Atb.sln` passes with the segment camera parented under the segment transform
-  status: done
-
-- task: ID renumbering — one function in `Atb.Core/Cards/Renumber.cs` that inserts or deletes a
-    segment, joint, plane, or vehicle and shifts every reference to it in every other card, using
-    the schema's reference kinds; used by the grid screen's add/delete row for those cards.
-  guardrails:
-    - A reference the schema does not mark is never touched; add the schema mark instead
-    - Deleting an entity that is still referenced asks first and lists the referencing cards
-  done when:
-    - Inserting a segment before segment 3 in `cases/2479/2479_2.LIN` increments every segment reference ≥ 3 across B.3, D.*, F.*, G.*, H.* cards, and the deck still validates
-    - Deleting the last joint then re-adding it reproduces the original deck byte-for-byte
-    - Existing passing tests remain passing
-  caution: true
-  status: done
-
-- task: GEBOD body generator, copying ATB 3I's `GEBOD.cs` screen — the form's fields (subject
-    description, subject type, percentile or measured values, unit choices) become the typed answers
-    the 2000-era console program `Gebodv.exe` expects on stdin (prompts: `PLEASE ENTER A DESCRIPTION OF
-    THE SUBJECT`, `ENTER NUMBER CORRESPONDING TO DESIRED SUBJECT TYPE`, `ENTER DESIRED PERCENTILE FOR`,
-    `ENTER VALUE FOR`, `SELECT UNITS FOR`, `ENTER THE NUMBER CORRESPONDING TO THE DESIRED`, optional
-    `FULL PATH NAME OF THE FILE ... UNIT 1`). Run it through `SolverRun` in stdin mode in a temp dir
-    with `GEBOD.DAT` beside it, then feed the resulting `GEBOD.ain` through the existing Convert path
-    and open the `.lin` in the grid. Copy `Gebodv.exe` and `GEBOD.DAT` from
-    `~/atb/ATB_INSTALL/ATB_OLD/ATB 1.3/ATB Update/1300 patch/NewFiles/` into `frontend/bin/`.
-    Human check: generating a 50th-percentile adult male on Windows yields a deck that opens and runs.
-  guardrails:
-    - `Gebodv.exe` is never modified; the app only answers its prompts
-    - The GEBOD form asks exactly what ATB 3I's `GEBOD.cs` asks, in the same order, with the same defaults
-  done when:
-    - An `Atb.Core` function turns a GEBOD request record into the ordered stdin answer lines, and the prompt→answer mapping is unit-tested for the percentile path and the measured-values path
-    - `frontend/bin/Gebodv.exe` and `frontend/bin/GEBOD.DAT` are in the repo and the publish step copies them beside `ATB.exe`
-    - `dotnet build app/Atb.sln` passes with a Tools > GEBOD menu item opening the form
-  status: done
-
-### Round 1b — acceptance-review fixes (added 2026-09-12)
-
-- task: Run and Convert never overwrite existing files silently, as in ATB 3I, which asked for the output
-    name with a Save dialog every time (`decomp/ATB3I/MainMenu.cs:3072-3081`). In `Atb.App/MainForm.cs`
-    `RunSolver`, before starting, show a `SaveFileDialog` "Save results as" (`OverwritePrompt` on),
-    pre-filled with the deck's folder and base name, filter `*.aou` for Run and `*.lin` for Convert; the
-    chosen folder + base becomes the output base; cancelling the dialog aborts the run. Change
-    `Atb.Core/Solver/SolverJob.Finish(workDir, outBase, deckPath, mode, cancelled)` to take the destination
-    directory and a `succeeded` flag: copy outputs only on success, and always delete the scratch dir
-    (try/finally), even when a copy throws. This also fixes `MainForm.cs:327`, which keys on
-    `res.Error == "cancelled"` and so copies partial outputs over good ones after a solver failure.
-  guardrails:
-    - Nothing is written into the deck's folder unless the user chose it in the dialog
-    - The UI thread never blocks on the solver
-  done when:
-    - A failed, non-cancelled run leaves previously existing `<base>.aou/.sa1/.t2x` byte-identical and removes the scratch dir (unit test on temp dirs)
-    - `Finish` copies to the given destination dir and base rather than the deck's dir, and Convert writes `<chosen>.lin` (unit test)
-    - Flipping the success gate, or ignoring the destination dir, makes a test fail (mutation checks recorded in the item report)
-    - `dotnet build app/Atb.sln` passes with the Save dialog wired into Run and Convert
-  status: done
-
-- task: Close the renumbering gaps item 6 left open, following ATB 3I's `ATB3I.Util/ATBUpdate.cs` except
-    where 3I leaves a reference stale. (1) Keep renumbering H.1–H.9 (3I never touches H tables,
-    `ATBUpdate.cs:203-308`) and record that divergence in `STANDARDS.md`. (2) Grid paste on the segment,
-    joint, plane and vehicle screens (`MainForm.cs` `PasteRows` → `InsertLines`) goes through
-    `Renumber.Insert` per accepted row, the same path as Add. (3) Mark H.11 `Actuator`
-    (`CardSchema.cs:182`) with a new actuator reference kind so the F.10 cascade shifts or drops H.11
-    refs and updates H.11's `Count` (3I has this gap; fix it and note the divergence). (4) Add schema
-    marks for the D.4, F.2.B, F.6 and F.9 segment/ellipsoid/airbag fields that `ATBUpdate.cs:223-253`
-    updates (`D4aD4f`, `F2b`, `F6`, `F9f/g/i/j/m`), mirroring `UpdateOtherTable` (shift on insert,
-    shift or drop on delete, `resetRID`). (5) Remove the D.6 Type 5 "second line" branch
-    (`Renumber.cs:128`) — `src/input_contraints.for` reads one line per constraint for every `KQTYPE`.
-  guardrails:
-    - A reference the schema does not mark is never touched; add the schema mark instead
-    - Every new mark cites the `ATBUpdate.cs` line it copies, or the `STANDARDS.md` divergence it implements
-    - Paste keeps rejecting rows whose token count disagrees with the schema
-  done when:
-    - Pasting two B.2 segment rows before segment 3 on `cases/2479/2479_2.LIN` shifts every segment reference ≥ 3 by 2, grows the B.1 counts by 2, and the deck validates (unit test)
-    - Deleting an F.10 actuator removes it from H.11, renumbers later actuator refs, and updates H.11's `Count` (unit test)
-    - Inserting a segment before one referenced by D.4, F.2.B, F.6 or F.9 shifts those refs, and deleting a D.6 Type 5 constraint removes exactly one line (unit tests on client decks; where no client deck carries a card, build the case from the schema and say so)
-    - Existing passing tests remain passing
-  caution: true
-  status: done
-
-- task: Validate the deck before Save and Run — `MainForm` calls `Deck.Validate()` before writing or
-    running, and when it reports problems shows a warning listing each label, line number and reason,
-    with Cancel and Continue.
-  guardrails:
-    - Continue writes exactly what Save writes today; validation never alters the deck
-  done when:
-    - An `Atb.Core` function formats `Deck.Validate()` results as one "line N (label): reason" row each, unit-tested on a deck with one bad token count
-    - `dotnet build app/Atb.sln` passes with the check wired before Save, Save As, Run and Convert
-  status: done
-
-- task: Windows UI test robot. New project `app/Atb.App.UiTests/` (`net8.0-windows`, xunit, `FlaUI.UIA3`),
-    kept out of `Atb.sln`. New `.github/workflows/app-e2e.yml` (`windows-2022`, `workflow_dispatch`):
-    build the solver by calling `windows-build.yml` (add `on: workflow_call` there) and consuming its
-    `atb-win32-exe` artifact; publish the app as `app-build.yml` does with `atb-win32.exe` beside `ATB.exe`
-    (also as a Content item in `Atb.App.csproj` so every publish ships it); run a GEBOD probe
-    (`frontend/bin/Gebodv.exe` fed `Gebod.Answers` for a 50th-percentile adult male, once with and once
-    without `C:\ATBFIG.SYS`); then the UI scenarios on temp copies of the decks, screenshotting each
-    step: grid edit + Save on each `cases/*.LIN`; Run on `2479_2.LIN` answering the Save dialog with
-    `$WORK/2479_2/2479_2_new`, then `verify/cmp.py` with a matching `cases.txt`; insert a segment in
-    `2479_2.LIN`, save, Run to completion; viewer open/play/step on every `cases/**/*.sa1` and
-    `example/sledout.sa1` with screenshots at 0/50/100%. Upload screenshots, logs, outputs and the probe's
-    `GEBOD.ain` as artifacts. Commit the probe's `GEBOD.ain` as `app/Atb.Core.Tests/fixtures/gebod-50m.ain`.
-  guardrails:
-    - `windows-build.yml` behaves exactly as before when dispatched by hand
-    - The robot never writes into `cases/`; every deck it touches is a temp copy
-    - macOS `dotnet test app/Atb.sln` is unaffected by the new project
-  done when:
-    - A dispatched `app-e2e.yml` run on the item branch completes green, and its artifact holds the published app folder with `atb-win32.exe` beside `ATB.exe`, a screenshot per scenario step, and the `cmp.py` report (run URL in the item report)
-    - In that run each `cases/*.LIN` edit + Save differs from the original in exactly the edited token; Run on `2479_2.LIN` through the app yields `.aou/.sa1/.t2x` identical to a direct `atb-win32.exe` run of the same deck in the same job, per `frontend/probe/compare.py cross` with `frontend/package/volatile.txt` (the solver's results vary by runner CPU, so the references are not the gate), with `cmp.py`'s report against the references uploaded alongside; and the renumbered deck runs to completion
-    - The viewer scenario plays every `.sa1` with no error dialog, and its screenshots are listed in the item report with what each shows
-    - `app/Atb.Core.Tests/fixtures/gebod-50m.ain` is committed from the probe, and the item report says whether `Gebodv.exe` succeeds without `C:\ATBFIG.SYS`
-  status: done
-
-- task: Merge GEBOD output into the open deck, as ATB 3I does from its Body screen (`decomp/ATB3I/Body.cs:964-1076`
-    Add / Insert before / Insert after / Replace; `GEBOD.cs:2239-2417` `InsertHumanBody`;
-    `ATBUpdate.UpdateDueToBody` cascade; counts from row counts). New `Atb.Core/Cards/GebodMerge.cs`
-    `Merge(Deck, ainText, placement)`: parse `GEBOD.ain`'s B.2–B.5 cards with the Fortran `FORMAT`s in
-    `src/input_*` (the `AIN_CONVERT` branches show the matching `.lin` write format), emit `.lin` lines in
-    that format, and insert each segment and joint through `Renumber.Insert`; Replace deletes the body's
-    segments through `Renumber.Delete` with one up-front confirmation, then inserts. Body boundaries follow
-    3I's `RefSegment`/`BodyCount` logic. `GebodForm` gets the placement choice and 3I's warning text
-    (`Body.cs:990`). `MainForm.Gebod()` merges into the open deck instead of calling `ConvertAin`. A new
-    File > New builds 3I's empty deck (`decomp/ATB3I/FileManager.cs:36-92`: IN/LB/SEC, gravity Z 386.088,
-    dummy vehicle, B.1 "No Data") so GEBOD works with no deck open. Stop writing `C:\ATBFIG.SYS` if the
-    robot's probe showed `Gebodv.exe` succeeds without it.
+- task: GEBOD Replace follows ATB 3I — in `Atb.Core/Cards/GebodMerge.cs` `Merge` with `GebodMode.Replace`,
+    references into the replaced body are kept by position, as 3I's `GEBOD.cs:1766-1800` builds its update list
+    and `ATBUpdate.UpdateDueToBody` / `UpdateOtherTable` (`ATBUpdate.cs:103`, `:326-351`) applies it: a reference
+    outside the body to old segment (or joint) *i* of the body names the new body's *i*-th segment (or joint); when
+    the old body had more segments or joints than the new one, the surplus positions go through `Renumber.Delete`
+    (so references to them cascade or blank exactly as a segment/joint delete does) and every later reference
+    shifts down by the difference; when the new body has more, the extra ones go in through `Renumber.Insert`
+    after the kept positions and every later reference shifts up. The body's own cards (B.2.a/b, B.6, G.3.a,
+    B.3–B.5) are replaced by GEBOD's. The single confirmation uses 3I's text from `Body.cs:1049`.
+    `ReplacedReferences` lists only the references that will be dropped (surplus positions). Remove the
+    `ponytail:` note at `GebodMerge.cs:51` and update any `STANDARDS.md` line that describes the old drop-all
+    behaviour.
   guardrails:
     - `Gebodv.exe` is never modified; the app only answers its prompts
     - The merge has no renumbering of its own; every reference shift goes through `Renumber`
-    - Column positions come from the Fortran `FORMAT`s, never guessed from the sample file
+    - Add, Insert before and Insert after behave exactly as today; only Replace changes
   done when:
-    - Merging `fixtures/gebod-50m.ain` into `2479_2.LIN` as a new body appends its segments and joints, grows the B.1 counts by the GEBOD segment and joint counts, and the deck validates (unit test with literal expected lines)
-    - Insert-before-body-1 shifts every existing segment and joint reference by the GEBOD counts, and Replace-body-1 removes body 1's segments and joints before inserting and leaves a deck that validates (unit tests)
-    - File > New's deck plus a GEBOD Add passes `Deck.Validate()` (unit test)
-    - `dotnet build app/Atb.sln` passes with the placement choice on `GebodForm` and Tools > GEBOD merging into the open deck
+    - Replacing body 1 of `cases/2479/2479_2.LIN` with `fixtures/gebod-50m.ain` leaves every reference outside the body that named old segment *i* (for *i* up to the smaller segment count) naming new segment *i*, and the deck validates (unit test with literal expected lines)
+    - Replacing a body with a smaller GEBOD body drops references to the surplus positions, shifts later references by the difference, and updates B.1 counts (unit test; where no client deck fits, build the case from the schema and say so); reverting to the old drop-all rule, or skipping the shift, makes a test fail (mutation checks recorded in the item report)
+    - A robot scenario opens a temp copy of `2479_2.LIN`, runs Tools > GEBOD (50th-percentile adult male) with Replace body 1, answers Yes, saves and runs to completion, screenshotting each step, in a green `app-e2e.yml` run (run URL in the item report)
+    - Existing passing tests remain passing, except those that asserted the old drop-all Replace, which are updated to the 3I rule and named in the item report
   caution: true
-  status: done
+  status: not started
 
-- task: Full Windows end-to-end pass — add a GEBOD scenario to `Atb.App.UiTests` (File > New → Tools >
-    GEBOD, 50th-percentile adult male, Add as new body → Save → Run to completion, screenshots each step)
-    and dispatch `app-e2e.yml` on the final branch with every scenario.
+- task: Segment and joint insert/delete warning, as ATB 3I — on the segment screens (`B.2.A`, `B.6`, `G.3.A`) and
+    joint screens (`B.3.A`, `B.4.A`, `B.5.A`) in `Atb.App/MainForm.cs` (`AddRow`, `DeleteRows`, `PasteRows`), show
+    3I's cascade warning once per action before changing the deck: segments "You have inserted/deleted segments
+    and this requires CASCADE UPDATE/DELETE\r\nother input cards referring these segments.  Continue?" titled
+    "Cascade Update of Segment ID Number"; joints the twin text and title (`TableForm.cs:412-440`), Yes/No, No
+    leaves the deck unchanged. Inserting a segment inserts the segment alone: no joint is added and no joint-count
+    check is added anywhere; the solver's STOP 24 on such a deck is 3I's behaviour too. Delete shows one dialog:
+    3I's text, with today's list of referencing cards (`ConfirmDelete`) below it. The texts live as `Atb.Core`
+    constants.
   guardrails:
-    - Scenario assertions are not loosened to make the run pass; a failure is fixed at its cause or reported
+    - Plane, vehicle and actuator screens keep today's dialogs
+    - `Deck.Validate()` gains no joint-count rule
   done when:
-    - A dispatched `app-e2e.yml` run with every scenario, the GEBOD one included, completes green (run URL in the item report)
-    - Every screenshot in that run's artifact is listed in the item report with what it shows, and none shows an error dialog
-  status: done
+    - The two warning texts and titles are `Atb.Core` constants equal, character for character, to 3I's strings (unit test with the literal 3I text)
+    - Inserting one segment through `Renumber.Insert` on `cases/2479/2479_2.LIN` leaves the joint count unchanged and `Deck.Validate()` reports nothing (unit test)
+    - A robot scenario on a temp copy of `2479_2.LIN` screenshots the segment warning, answers No and saves a file byte-identical to the original, then answers Yes and sees the grid grow by one row; the existing `InsertSegmentRun` scenario still passes answering Yes to both warnings (green `app-e2e.yml` run, URL in the item report)
+    - Existing passing tests remain passing
+  status: not started
+
+- task: Body Summary screen (§2 #6), copying ATB 3I's `Body.cs` "Body Editing Form" — Model > Body Summary...
+    (`MainMenu.cs:2698`) opens a list of the deck's bodies (3I's columns, General Description from B.1) with
+    3I's buttons in 3I's order: Add/Insert Copied Body, Copy Body, Replace Body with Copied Body, Delete Body,
+    Add/Insert Body Using GEBOD, Replace Body Using GEBOD, Save & Exit; each shows 3I's dialog text
+    (`Body.cs:627`, `:665`, `:756`, `:860`, `:990`, `:1019`, `:1049`) with 3I's buttons. The whole-body operations
+    live in new `Atb.Core/Cards/Bodies.cs` over `Renumber` and `GebodMerge.BodyStarts` / `ReplaceRange`: copy
+    carries the body's segments, joints and every dependent per-segment/per-joint card (`Body.cs:1255-1298`);
+    delete removes the body as 3I's `DeleteBody` (`Body.cs:1078-1124`) through `Renumber.Delete`; replace with a
+    copied body uses the same keep-by-position function as the GEBOD Replace item (one shared function, not
+    two). The GEBOD buttons open the existing `GebodForm` with the placement preset.
+  guardrails:
+    - No renumbering of its own; every reference shift goes through `Renumber`
+    - A body copy carries its joints and every dependent card, as ATB 3I does
+  done when:
+    - Deleting the second body in `cases/2638/2638_Start_135_.LIN` leaves a deck that validates (unit test), and a robot scenario doing it through the screen saves and runs that deck to completion
+    - Copying body 1 of a client deck and adding it appends its segments and joints with every copied reference renumbered onto the copy (unit test with literal expected lines)
+    - Replacing a body with a copied body of a different size keeps references by position and drops or shifts the rest, through the same function the GEBOD Replace uses (unit test; removing the shared call makes it fail)
+    - A robot scenario opens Body Summary on a client deck and screenshots the form and each button's dialog, in a green `app-e2e.yml` run (URL in the item report)
+  caution: true
+  status: not started
+
+- task: Maximum Value List screen (§2 #38) — the read-only grid 3I opens from `mnuSetting` (`MainMenu.cs:2561`),
+    same menu place, title, columns and row order, showing the solver limits from the `Setting` table
+    (`mdb-export ATB3iData.mdb Setting`: Max Segment 80 … Balance Force 2). The rows are an `Atb.Core` constant
+    copied from the export; the app never opens the `.mdb`.
+  guardrails:
+    - Read-only: no cell can be edited and nothing is written; raising limits is out of scope
+  done when:
+    - The `Atb.Core` constant holds all 21 `Setting` rows with the export's names and values, in 3I's display order (unit test with the literal rows)
+    - `dotnet build app/Atb.sln` passes with the grid read-only and the menu item wired
+    - A robot scenario opens the screen and screenshots it, in a green `app-e2e.yml` run (URL in the item report)
+  status: not started
 
 > **⚠️ AUTONOMOUS RUN — STOP HERE**
 
-- task: Body Summary screen (insert/copy/replace/delete whole bodies) over the renumbering function
-  guardrails:
-    - A body copy carries its joints and every dependent card, as ATB 3I does
-  done when:
-    - Deleting the second body in `cases/2638/2638_Start_135_.LIN` leaves a valid deck the solver runs
-    - Copying a body appends its segments and joints with renumbered references
-  status: not started
+### S2 — Vehicle Motion, function editors
 
-- task: Vehicle Motion list and its four sub-editors (half-sine, unidirectional, 6-DOF, spline P/V/A) with the deceleration plot
+- task: Vehicle Motion list (§2 #10) and its four sub-editors (half-sine, unidirectional, 6-DOF, spline P/V/A)
+    with the deceleration plot, copying `Vehicle.cs`, `VehOpt1.cs`, `VehOpt2.cs`, `VehOpt34.cs`, `Plots.cs`
+    (C.1–C.5 cards).
   guardrails:
     - One form per variant; the variant is decided by the same rule as ATB 3I's `VehicleType()`
+    - Editing a row rewrites only that deck line
   done when:
-    - Each client deck's vehicles open in the right sub-editor
-    - Editing a time-history row updates the C.3/C.4/C.5 card and the plot
+    - Each client deck's vehicles open in the sub-editor `VehicleType()` picks (unit test on the rule over `cases/` and `corpus/`)
+    - Editing a time-history row updates the C.3/C.4/C.5 card and nothing else, and the plot's points come from one `Atb.Core` function (unit tests)
+    - A robot scenario opens every sub-editor on a client deck, edits one row, saves, and screenshots the plot, in a green `app-e2e.yml` run
+  caution: true
   status: not started
 
-- task: Function editors — Force Deflection (constant/polynomial/tabular), Joint Stiffness, Wind Force — with the painted curve plot
+- task: Function editors (§2 #17, #18, #19) — Force Deflection (constant / polynomial / tabular), Wind Force time
+    history, Joint Stiffness, with the painted curve plot, copying `FDFData.cs`, `JntFData.cs`, `Plots.cs`
+    (E.1–E.4, E.6, E.7 cards).
   guardrails:
     - Polynomial evaluation for the plot matches the solver's function definition in the user guide
   done when:
-    - Every E.* function in the client decks opens, plots, and saves unchanged
+    - Every E.* function in `cases/` and `corpus/` opens, and saving it unedited changes zero bytes (unit test)
+    - The plot's curve points come from one `Atb.Core` function, unit-tested for a constant, a polynomial and a tabular function
+    - A robot scenario opens each editor on a client deck and screenshots the plot, in a green `app-e2e.yml` run
   status: not started
 
-- task: HIC/CSI screen, Run Control form, Output Control Parameter grids with names from `A5Defination`
+### S3 — Run Control, Output Control, HIC/CSI
+
+- task: Run Control form (§2 #4) — A.1, A.3, A.4 (units, gravity, integrator, output interval), 16 fields, copying
+    `RunControl.cs`.
+  guardrails:
+    - Editing a field rewrites only its deck line
+  done when:
+    - The form opens on every `cases/` deck and saving unedited changes zero bytes (unit test on the form's field ↔ card mapping)
+    - A robot scenario edits one field, saves, and the saved deck differs in exactly that token
+  status: not started
+
+- task: General / Diagnostic Output Control Parameters (§2 #5) — the A.5 grid of 36 NPRT flags in 3I's two
+    categories, names from the `A5Defination` table (copied as an `Atb.Core` constant).
+  guardrails:
+    - Flag names and category split match `A5Defination` exactly
+  done when:
+    - The constant matches `mdb-export ATB3iData.mdb A5Defination` (unit test with literal rows)
+    - A robot scenario toggles one flag, saves, and the saved deck differs in exactly that token
+  status: not started
+
+- task: HIC and CSI Definition (§2 #36) — H.12 form + grid, copying `HIC.cs`, enabled by NPRT(4).
   guardrails:
     - HIC screen enablement follows NPRT(4) exactly as ATB 3I
   done when:
-    - The three screens open on every client deck and save unchanged
+    - The enablement rule is an `Atb.Core` function unit-tested on a deck with NPRT(4) on and off
+    - The screen opens on every client deck that enables it and saving unedited changes zero bytes (unit test)
+    - A robot scenario opens the screen and screenshots it
   status: not started
 
-- task: Installer — Inno Setup script built on the `windows-2022` runner producing one setup exe with the self-contained app and `atb-win32.exe`
+### S4 — Weight Balancing
+
+- task: Weight Balancing probe — a robot step in `app-e2e.yml` that runs `frontend/bin/ATBV3_ATB3I.exe` through
+    the handoff (`EXECATB.DAT` = `99`) on one `cases/` deck with a body, once with NPRT(33) = 1 (setup run) and
+    once with NPRT(33) = 2 (balance run, the balanced body's G.2 / G.3.a carrying the pose, `FileManager.cs:1186`,
+    `:2044-2066`), and uploads `balance.run`, `balance.pos`, `balance.res`, `ATBDEBUG.TXT`. Commit the outputs under
+    `app/Atb.Core.Tests/fixtures/balance/`.
   guardrails:
-    - No admin-only paths; per-user install works
+    - No balance code in `src/`; if exe B will not produce the files, stop and report to Nate
+    - The robot never writes into `cases/`
   done when:
-    - The setup exe installs on a clean Windows 11 VM, the app starts, opens a deck, and runs the solver
+    - A green `app-e2e.yml` run's artifact holds all four files for both runs (URL in the item report)
+    - The files are committed under `app/Atb.Core.Tests/fixtures/balance/`
+  status: not started
+
+- task: Weight Balancing screens (§2 #29) — "Weight Balancing Setup" (pick a body, contact-plane flags,
+    `ToBalance.cs`) and "Body Weight Balancing" (rotate / translate a segment, angles, accelerations, forces, OK,
+    `Balance.cs`), with the 3D pose in the existing viewer. `balance.pos` / `balance.res` are read by position
+    (`Balance.cs:776-820`, `:1264-1314`, `:1465-1501`); `balance.run` present = success, else point at
+    `ATBDEBUG.TXT`. The pose math is `FindAngle()` (`Balance.cs:3194-3304`); OK writes G.2 and G.3.a
+    (`Balance.cs:1590-1643`).
+  guardrails:
+    - Only Weight Balancing uses exe B; every other run keeps `atb-win32.exe`
+    - OK rewrites only G.2 and G.3.a lines
+  done when:
+    - The `.pos` / `.res` parsers read the probe fixtures on macOS (unit tests with literal values)
+    - OK writes G.2 / G.3.a and every other line stays byte-exact (unit test)
+    - The robot runs the full wizard once on Windows and screenshots each step
+  caution: true
+  status: not started
+
+### S5 — installer, robot sweep
+
+- task: Installer — Inno Setup on `windows-2022` producing one unsigned setup `.exe` with the self-contained x64
+    app, `atb-win32.exe`, `ATBV3_ATB3I.exe` (Weight Balancing only), `Gebodv.exe` + `GEBOD.DAT`. It asks for admin
+    once and writes `C:\ATBFIG.SYS` in the layout `GebodTests.AtbFig_MatchesInstallerLayout` pins; the app stops
+    writing `C:\` itself. Original for comparison: `~/atb-work/p0/ATBV3_msi.exe`.
+  guardrails:
+    - The setup `.exe` is unsigned; nothing asks for a certificate
+  done when:
+    - The setup `.exe` installs silently on the runner, and `C:\ATBFIG.SYS` then matches the pinned layout
+    - No code path in `Atb.App` writes under `C:\` outside the install and work folders (unit test or grep floor plus a test)
+    - The installed app starts, opens a deck, and runs the solver in a robot scenario
+  status: not started
+
+- task: Robot sweep — install with the setup `.exe` on the runner, then run every scenario against the installed
+    app, plus open-save one deck from each `corpus/` folder; every §2 screen opens with a screenshot.
+  guardrails:
+    - Scenario assertions are not loosened to make the run pass; a failure is fixed at its cause or reported
+  done when:
+    - A green `app-e2e.yml` run against the installed app with every scenario (URL in the item report)
+    - Every screenshot is listed in the item report with what it shows, and none shows an error dialog
   status: not started
 
 ## Not yet specified
 
-- Weight Balancing: the positional `balance.pos`/`balance.res` formats need a captured sample from the XP VM before an item can be written — revisit after the Run action item
+None this round.
 
 ## Out of scope
 
 - License gate, About/order dialog, SnagIt capture — dropped on purpose; the client owns the software
-- Raising solver limits, `Setting` table becomes read-only display — excluded by the quote §3
+- Raising solver limits; the `Setting` table is a read-only display — excluded by the quote §3
 - Bit-identical numerics across machines — excluded by the quote §3; documented in `VERIFICATION.md`
 - Plotting `.t2x`/`.tp8` time histories — ATB 3I never did it; parity does not require it
 - Mac build of the app — client runs Windows; `Atb.Core` tests on Mac are enough
+- Code signing — the client note tells him SmartScreen will warn ("More info → Run anyway")
+- Nate's change requests — they come after v1 (HANDOFF-PLAN S8)
