@@ -92,7 +92,7 @@ Context: `docs/HANDOFF-PLAN.md` (sessions, decisions), `docs/TIER2-SCOPE.md` (sc
     - Inserting one segment through `Renumber.Insert` on `cases/2479/2479_2.LIN` leaves the joint count unchanged and `Deck.Validate()` reports nothing (unit test)
     - A robot scenario on a temp copy of `2479_2.LIN` screenshots the segment warning, answers No and saves a file byte-identical to the original, then answers Yes and sees the grid grow by one row; the existing `InsertSegmentRun` scenario still passes answering Yes to both warnings (green `app-e2e.yml` run, URL in the item report)
     - Existing passing tests remain passing
-  status: not started
+  status: blocked — code, unit tests and robot scenario written (f18eea3); the Windows run could not start: GitHub Actions billing (run 34910052325)
 
 - task: Body Summary screen (§2 #6), copying ATB 3I's `Body.cs` "Body Editing Form" — Model > Body Summary...
     (`MainMenu.cs:2698`) opens a list of the deck's bodies (3I's columns, General Description from B.1) with
