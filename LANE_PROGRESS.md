@@ -13,7 +13,7 @@ LANE.md is the contract; this tracks where we are in it — if they disagree, LA
 
 | Item | Status |
 |------|--------|
-| GEBOD Replace follows ATB 3I | not started |
+| GEBOD Replace follows ATB 3I | done (2026-09-14) — GEBOD's Replace now points every card that used the old body's segments and joints at the new body's, in order, as ATB 3I does; only the extra positions of a larger old body are removed. |
 | Segment and joint insert/delete warning | not started |
 | Body Summary screen | not started |
 | Maximum Value List screen | not started |

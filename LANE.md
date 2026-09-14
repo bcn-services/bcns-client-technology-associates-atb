@@ -73,7 +73,7 @@ Context: `docs/HANDOFF-PLAN.md` (sessions, decisions), `docs/TIER2-SCOPE.md` (sc
     - A robot scenario opens a temp copy of `2479_2.LIN`, runs Tools > GEBOD (50th-percentile adult male) with Replace body 1, answers Yes, saves and runs to completion, screenshotting each step, in a green `app-e2e.yml` run (run URL in the item report)
     - Existing passing tests remain passing, except those that asserted the old drop-all Replace, which are updated to the 3I rule and named in the item report
   caution: true
-  status: not started
+  status: done
 
 - task: Segment and joint insert/delete warning, as ATB 3I — on the segment screens (`B.2.A`, `B.6`, `G.3.A`) and
     joint screens (`B.3.A`, `B.4.A`, `B.5.A`) in `Atb.App/MainForm.cs` (`AddRow`, `DeleteRows`, `PasteRows`), show
