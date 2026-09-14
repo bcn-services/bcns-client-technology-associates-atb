@@ -1,37 +1,38 @@
-# Engineer Report
+# Engineer Report (attempt 2, fix pass)
 Branch: r2-gebod-replace
-Commit: fc3c82a (feat), report commit follows
-Tests: 1156 passed, 0 failed (floor 1151; +5)
-Run: https://github.com/bcn-services/bcns-client-technology-associates-atb/actions/runs/34905843854 (success: GebodReplaceBody1Run, InsertSegmentRun, NewGebodSaveRun all Passed)
+Commit: cdd5e1f (fix), plus a comment-and-report commit on top
+Tests: 1163 passed, 0 failed (floor 1151, was 1161, +2)
+Run: https://github.com/bcn-services/bcns-client-technology-associates-atb/actions/runs/34908386359 (success at cdd5e1f: GebodReplaceBody1Run, InsertSegmentRun, NewGebodSaveRun all Passed)
 Date: 2026-09-14
-Task: GEBOD Replace follows ATB 3I's by-position rule (GEBOD.cs:1766-1800, ATBUpdate.UpdateDueToBody/UpdateOtherTable)
+Task: GEBOD Replace follows ATB 3I (fix QA FAIL plus review 0/3/2)
 
-## Findings
-- GebodMerge.Replace: old seg/joint i -> new i via in-place Swap of own lines (B.2.a/b, B.6, G.3.a; B.3-B.5); surplus -> Renumber.Delete (highest first); extra -> Renumber.Insert after kept positions. No renumbering of its own.
-- ReplacedReferences(deck, body, newSegments) now lists only refs to surplus positions (own body lines excluded); ponytail note at GebodMerge.cs:51 removed.
-- Add / Insert before / Insert after paths are unchanged (all their existing tests pass).
-- Confirmation: 3I's Body.cs:1049 text ("Replace Body Using GEBOD", Yes/No, Question), asked once before GEBOD runs (GebodForm.ReplaceText, MainForm.ConfirmReplace).
-- FLAG for human: GEBOD's NSEGS (15/17/33) is unknown before the run, so when the new body is shorter a second "GEBOD" Yes/No dialog lists the dropped refs after the run (MainForm.ConfirmDropped); 3I drops them silently. Decline = deck unchanged.
-- Divergence (STANDARDS.md): 3I DeleteBody counts a non-last body's joints as a..b, leaving the next body's NULL-joint ref stale; we use a-1..b-1 (body 1: 1..b-1) so joint i maps to i.
-- STANDARDS.md had no drop-all line; added "GEBOD Replace is by position" under Body structure plus the divergence line.
-- Test 1 (literal lines, 2479_2 body 1 + gebod-50m.ain): ReplaceBody1_KeepsRefsByPosition_AndShiftsLaterOnesByTheDifference; deck validates, B.1 "30 29".
-- Test 2 (shorter body): no client deck has a GEBOD-shorter body, so SmallAin(n) cuts gebod-50m.ain to n segments per the .ain schema; ReplaceWithShorterBody_DropsSurplusRefs_AndShiftsLaterOnesDown (body 2, 3 segs, B.1 "5 4") and ReplaceBody1WithShorterBody_MovesTheNextBodyDown (body 1, 1 seg, B.1 "16 15").
-- Drop-all tests changed: ReplaceBody1_RemovesItsSegmentsAndJointsThenInserts -> ReplaceBody1_KeepsRefsByPosition_AndShiftsLaterOnesByTheDifference.
-- Drop-all tests changed: ReplaceBody1_ConfirmSeesTheRemovedReferences_AndDeclineChangesNothing -> ReplaceWithShorterBody_DropsSurplusRefs_AndShiftsLaterOnesDown.
-- Drop-all tests changed: ReplaceDecline_LeavesDeckByteIdentical_AndConfirmIsAskedOnce now uses shorter bodies (1,1),(2,3); ReplaceConfirmList_CoversEveryRefIntoTheReplacedBody -> ReplaceConfirmList_CoversEveryRefToASurplusPosition.
-- New QA tests: ReplaceWithLongerOrEqualBody_DoesNotAsk; Replace_EveryFamilyRef_KeepsItsPositionOrMovesByTheDifference(1,2); Merged() adds replace1small/replace2small.
-- Mutation (a) drop-all rule: FAIL at GebodMergeTests.cs:164 Assert.Equal expected "1 32 1 63 1 0 1 3 1 -1 0" actual "2 32 16 16 10 0 11 3 12 -2 0" (4 tests fail in total).
-- Mutation (b) skip shift (surplus segments removed without Renumber.Delete): FAIL at GebodMergeTests.cs:227 F.1.B Single() for the shifted row "2 18 2 2 ..." (5 tests fail in total).
-- Both mutations: cp backup, restored by cp, cmp byte-identical, git status clean.
-- Local solver src/atb completes (STOP 1, "ATB Simulation completed!") on replace1, replace2, replace1small, replace2small decks.
-- Robot GebodReplaceBody1Run: 11 screenshots viewed; confirm shows 3I text; status goes 17 segments/16 joints -> 30/29; GEBOD LT 24.87 at row 0, old body at row 15; run finished with .aou/.sa1/.t21-.t27.
+## Fixes
+- 1 DONE app/Atb.App/MainForm.cs:494-495: Merge is given `_ => true`; ConfirmDropped and its dead OperationCanceledException catch are deleted. Only ConfirmReplace (3I Body.cs:1049) remains. ReplacedReferences stays in Core. (QA bug, review Important)
+- 2 DONE STANDARDS.md:23 is rewritten to cover body 1 of a multi-body deck and `GEBOD.cs:1797`. I checked this against the decompile: Body.cs:1052-1063 sets selJnt=0 for body 1, DeleteBody (Body.cs:1099-1102) takes joints 1..b-1, and the new count NSEGS includes the NULL added at GEBOD.cs:2407. So 3I makes sn+1..so surplus. Later bodies and a single-body deck match 3I. (review Important)
+- 2 DONE GebodMerge.cs BodyRange comment: body k's joints are a-1..b-2, body 1's are 1..b-2; the next body's NULL joint b-1 is not one of them.
+- 3 DONE Renumber.cs: the new internal CascadedActuators is the list Delete already computed (Delete now calls it), and H11Emptied is now internal. GebodMerge.ReplacedReferences adds the H.11 sites of cascaded actuators and the STOP 741 warning. No dialog. (review Important)
+- 3 test: GebodReplaceActuatorTests.SurplusActuators_AreListedWithTheirH11Entries_AndGoneAfterTheMerge. It puts an F.10 on surplus joint 5 and one on surplus segment 10, with H.11 entries. It checks that 2 F.10 sites and 2 H.11 sites are listed and that after the merge F.10 is "2 2 1 1 1 1", D.1.B is 1, H.11 is "1 1", and the deck validates.
+- 4 DONE GebodMerge.cs Swap: a missing group (such as G.3.A) now throws InvalidOperationException, because the schema says G.3.A is "one per segment". Before, GEBOD's line was dropped silently. MainForm's catch sends the throw to OfferSaveAin. Test: KeptSegmentWithoutG3A_Throws. (review Minor)
+- 5 DONE: a mutation of body 1's joint base to 3I's sn+1..so turns tests red (results below). (review Minor)
+- Scenarios.cs:197 comment no longer mentions a "surplus drop list". Comment only, after the green run.
+
+## Mutations (each backed up with cp, restored from the copy, cmp identical, git status clean afterwards)
+- M1 ReplacedReferences without actuator H.11 sites: 1 failure, GebodReplaceActuatorTests.cs:36 (H.11 count expected 2, actual 0).
+- M2 Swap `continue` on a missing group: 1 failure, GebodReplaceActuatorTests.cs:52 (Assert.Throws, no exception thrown).
+- M5 body 1 joint surplus loop shifted to 3I's sn+1..so: GebodReplaceJointQaTests.cs:62 Body1Surplus H.9 (expected "1 2 1", actual "0"). It also broke GebodMergeTests.cs:30 AssertSolverShape (via :229) and GebodMergeQaTests.cs:216, because deleting the next body's NULL joint breaks the body structure.
+
+## Verification
+- Local src/atb: replace1, replace1small, replace2, replace2small, jq-b1-16, jq-b1-30, jq-b2-18, jq-b2-32 and jq-b2-5 (ATB_QA_DUMP) all reach "ATB Simulation completed!" STOP 1.
+- Windows run 34907818557 (same commit) failed on InsertSegmentRun only. Its Unexpected() caught "ATB run [#32770] Run finished. Open the animation?", so RunDeck missed a late dialog. That path is not in this diff, and the re-run 34908386359 passed. Looks flaky; worth watching.
+- GebodReplaceBody1Run screenshots: 04 is 3I's text, title "Replace Body Using GEBOD", Yes/No, ? icon. 05 shows the status going from 17/16 to 30/29 with no second dialog. 11 shows LT 24.87 at row 1, old LT 30.86 at row 16, and "Run finished" with .aou/.sa1/.t21-.t27.
 
 ## Files Changed
-- app/Atb.Core/Cards/GebodMerge.cs: by-position Replace, BodyRange, Swap, SegData; ReplacedReferences(body, newSegments).
-- app/Atb.App/GebodForm.cs: ReplaceText = 3I Body.cs:1049 text.
-- app/Atb.App/MainForm.cs: ConfirmReplace before the run, ConfirmDropped after the run (surplus only).
-- app/Atb.Core.Tests/GebodMergeTests.cs: rewritten Replace tests, SmallAin helper.
-- app/Atb.Core.Tests/GebodMergeQaTests.cs: Replace QA tests updated to the 3I rule, plus the new ones above.
-- app/Atb.App.UiTests/Scenarios.cs: GebodReplaceBody1Run.
-- STANDARDS.md: by-position rule and the joint-range divergence.
-- Note: engineer-report.md was already deleted in the worktree before this spawn; this file replaces it.
+- app/Atb.App/MainForm.cs: ConfirmDropped removed, Merge gets `_ => true`.
+- app/Atb.Core/Cards/Renumber.cs: CascadedActuators extracted, H11Emptied made internal.
+- app/Atb.Core/Cards/GebodMerge.cs: ReplacedReferences made complete, Swap throws on a missing group, BodyRange comment fixed.
+- app/Atb.Core.Tests/GebodReplaceActuatorTests.cs: new, 2 tests.
+- app/Atb.App.UiTests/Scenarios.cs: comment only.
+- STANDARDS.md: divergence line rewritten; the by-position line now says there is no dialog.
+
+## Disputed / Deferred
+- none. Guardrails hold: Gebodv.exe is untouched, reference shifts go only through Renumber, and the Add/Insert paths are unchanged.

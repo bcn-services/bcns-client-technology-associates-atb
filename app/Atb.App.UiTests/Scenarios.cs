@@ -194,7 +194,7 @@ public class Scenarios
             || (r.Dialog("Replace Body Using GEBOD") == null && !r.Windows().Any(w => w.Name.StartsWith("GEBOD: ", StringComparison.Ordinal))
                 && r.Main.FindAllDescendants(r.A.ConditionFactory.ByControlType(ControlType.Text)).Any(e => segs.IsMatch(e.Name))), 120, "GEBOD run and merge");
         r.Shot("gebod-merged");
-        Assert.Empty(r.Unexpected());               // a "GEBOD" box (exe failed, merge failed, surplus drop list) lands here
+        Assert.Empty(r.Unexpected());               // a "GEBOD" box (exe failed, merge failed) lands here; 3I shows no post-run list
         r.SelectScreen(SegScreen);
         r.Cell("Weight Row 0");
         r.Shot("segment-screen");
