@@ -17,6 +17,9 @@ public class LabelerTests
     static readonly Regex AnyLabel = new(@"(?i)(^|\s+)Cards?\s+[A-Z0-9.]+\s*$");
     static bool Is2479(string path) => Path.GetFileName(path) == "2479_2.LIN";
     const int BugLine = 321;                       // cases/2479/2479_2.LIN: empty H.3.a written as "CARD H.1.a"
+    /// ATB 3I's bug row (2479_2 and its sibling decks in corpus/): only the label changes, H.1.a -> H.2.a/H.3.a.
+    static bool IsH1BugFix(string raw, string written) =>
+        raw.EndsWith("CARD H.1.a") && (written == raw[..^5] + "H.2.a" || written == raw[..^5] + "H.3.a");
 
     // "Labels completely": every line that carried any label ("Card x", "Cards x", malformed or not)
     // carries a schema label again, Validate() is clean, and the labels match the vendor's own
@@ -66,12 +69,13 @@ public class LabelerTests
         var written = WrittenLines(deck);
 
         Assert.Equal(raw.Length, written.Length);
+        var bugRows = Enumerable.Range(0, raw.Length).Where(i => IsH1BugFix(raw[i], written[i])).ToHashSet();   // pinned exactly by Bug2479
         for (int i = 0; i < raw.Length; i++)
         {
-            if (Is2479(path) && i + 1 == BugLine) continue;          // covered by Bug2479 test
+            if (bugRows.Contains(i)) continue;
             Assert.True(raw[i] == written[i], $"line {i + 1} changed: '{raw[i]}' -> '{written[i]}'");
         }
-        if (!Is2479(path)) Assert.Equal(File.ReadAllBytes(path), Encoding.Latin1.GetBytes(deck.Write()));
+        if (bugRows.Count == 0) Assert.Equal(File.ReadAllBytes(path), Encoding.Latin1.GetBytes(deck.Write()));
 
         // The grammar walk agrees with ATB 3I's own labels (so it did not desync): the only allowed
         // difference is H.1 continuation rows, which ATB 3I labels H.1.a and the schema calls H.1.B.
@@ -79,7 +83,7 @@ public class LabelerTests
         for (int i = 0; i < raw.Length; i++)
         {
             var have = original.Lines[i].Card;
-            if (grammar[i] == null || (Is2479(path) && i + 1 == BugLine)) continue;
+            if (grammar[i] == null || bugRows.Contains(i)) continue;
             if (have == "H.1.A" && grammar[i] == "H.1.B") continue;
             Assert.True(have == grammar[i], $"line {i + 1}: deck says {have}, grammar says {grammar[i]}");
         }

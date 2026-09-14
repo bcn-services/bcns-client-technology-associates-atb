@@ -13,8 +13,10 @@ static class Fixtures
         }
     }
 
+    /// cases/ (the 12 solver-verified decks) plus corpus/ (more client decks, .LIN only — outputs stay in ~/atb/ATB_Examples).
     public static IEnumerable<string> ClientDecks() =>
-        Directory.GetFiles(Path.Combine(RepoRoot, "cases"), "*.LIN", SearchOption.AllDirectories).OrderBy(x => x);
+        new[] { "cases", "corpus" }.Select(d => Path.Combine(RepoRoot, d)).Where(Directory.Exists)
+            .SelectMany(d => Directory.GetFiles(d, "*.LIN", SearchOption.AllDirectories)).OrderBy(x => x);
 
     public static IEnumerable<string> ClientSa1s() =>
         Directory.GetFiles(Path.Combine(RepoRoot, "cases"), "*.sa1", SearchOption.AllDirectories).OrderBy(x => x);
