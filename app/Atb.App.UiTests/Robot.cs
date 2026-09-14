@@ -116,6 +116,14 @@ public sealed class Robot : IDisposable
                  .Select(w => $"{w.Name} [{w.ClassName}] {DialogText(w)}").ToList();
 
     public AutomationElement WaitDialog(string title, double sec = 30) => Until(() => Dialog(title), sec, $"'{title}' dialog");
+    /// Waits for the dialog, screenshots it, clicks button, waits for it to close.
+    public void Answer(string title, string button)
+    {
+        var w = WaitDialog(title);
+        Log($"{title}: {DialogText(w)}"); Shot("dialog-" + title.Replace(' ', '-'));
+        Click(Button(w, button));
+        UntilTrue(() => Dialog(title) == null, 10, $"'{title}' closed");
+    }
     public AutomationElement Named(AutomationElement within, ControlType t, string name) =>
         Until(() => within.FindFirstDescendant(Cf.ByControlType(t).And(Cf.ByName(name))), 10, $"{t} '{name}'");
 

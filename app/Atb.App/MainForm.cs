@@ -202,6 +202,7 @@ public sealed class MainForm : Form
             var sel = SelectedIndexes();
             if (sel.Length == 0) { status.Text = "Select a row to copy as the new row."; return; }
             grid.EndEdit();
+            if (!Renumber.CascadeConfirmed(e, null, AskYesNo)) return;
             int n = sel[^1] + 1, at = e == Entity.Vehicle ? n : n + 1;   // a vehicle goes before the selected one: the primary stays last
             try { Renumber.Insert(deck, e, at, Renumber.Copy(deck, e, n)); }
             catch (Exception ex) when (ex is InvalidOperationException or ArgumentOutOfRangeException) { status.Text = ex.Message; return; }
@@ -219,11 +220,21 @@ public sealed class MainForm : Form
         if (EntityOf(screen) is { } e)
         {
             grid.EndEdit();
+            var sel = SelectedIndexes();
+            bool cascade = e is Entity.Segment or Entity.Joint;
+            if (cascade)
+            {
+                // ATB 3I asks once per grid update; the reference lists of every selected row go below its text.
+                string detail;
+                try { detail = string.Join("\r\n\r\n", sel.Select(i => RefText(e, i + 1, Renumber.DeleteRefs(deck, e, i + 1))).Where(t => t != "")); }
+                catch (Exception ex) when (ex is InvalidOperationException or ArgumentOutOfRangeException) { status.Text = ex.Message; return; }
+                if (!Renumber.CascadeConfirmed(e, detail, AskYesNo)) return;
+            }
             int done = 0;
-            foreach (var i in SelectedIndexes().Reverse())                  // highest first: lower numbers stay valid
+            foreach (var i in sel.Reverse())                                // highest first: lower numbers stay valid
             {
                 int n = i + 1;
-                try { if (Renumber.Delete(deck, e, n, refs => ConfirmDelete(e, n, refs)) != null) done++; }
+                try { if (Renumber.Delete(deck, e, n, refs => cascade || ConfirmDelete(e, n, refs)) != null) done++; }
                 catch (Exception ex) when (ex is InvalidOperationException or ArgumentOutOfRangeException) { status.Text = ex.Message; }
             }
             if (done == 0) return;
@@ -242,11 +253,22 @@ public sealed class MainForm : Form
     /// Asks before deleting an entity that other cards still refer to, listing each referencing line.
     bool ConfirmDelete(Entity e, int n, IReadOnlyList<RefSite> refs)
     {
-        var (count, list) = RefList(refs);
-        var text = $"{e} {n} is still referenced by {count} line(s):\n\n" + list
+        var text = RefText(e, n, refs)
                  + "\n\nDelete it anyway? As in ATB 3I, contact/constraint/force rows that depend on it are deleted and other references are cleared.";
         return MessageBox.Show(this, text, $"Delete {e.ToString().ToLowerInvariant()}", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes;
     }
+
+    /// "Segment 3 is still referenced by N line(s):" and the list; "" when nothing refers to it.
+    static string RefText(Entity e, int n, IReadOnlyList<RefSite> refs)
+    {
+        if (refs.Count == 0) return "";
+        var (count, list) = RefList(refs);
+        return $"{e} {n} is still referenced by {count} line(s):\n\n" + list;
+    }
+
+    /// ATB 3I's cascade MessageBox: Yes/No, question icon, first button default (TableForm.cs:412).
+    bool AskYesNo(string text, string title) =>
+        MessageBox.Show(this, text, title, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button1) == DialogResult.Yes;
 
     /// Referencing lines, one per line with its fields, first 25 shown.
     static (int Count, string Text) RefList(IReadOnlyList<RefSite> refs)
@@ -289,6 +311,7 @@ public sealed class MainForm : Form
             else if (res.Rows.Count > 0)
             {
                 grid.EndEdit();
+                if (!Renumber.CascadeConfirmed(e, null, AskYesNo)) return;
                 int n = sel[^1] + 1, at = e == Entity.Vehicle ? n : n + 1;   // as AddRow: a vehicle goes before the selected one
                 try
                 {

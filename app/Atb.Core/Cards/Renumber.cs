@@ -111,6 +111,33 @@ public static class Renumber
         return data;
     }
 
+    /// ATB 3I TableForm.cs:412-440: asked once when grid rows of segments (B2B6M) / joints (B3B4B5M) are inserted or deleted.
+    public const string SegmentCascadeText = "You have inserted/deleted segments and this requires CASCADE UPDATE/DELETE\r\nother input cards referring these segments.  Continue?";
+    public const string SegmentCascadeTitle = "Cascade Update of Segment ID Number";
+    public const string JointCascadeText = "You have inserted/deleted joints and this requires CASCADE UPDATE/DELETE\r\nother input cards referring these joints.  Continue?";
+    public const string JointCascadeTitle = "Cascade Update of Joint ID Number";
+
+    /// 3I's cascade warning before a segment/joint insert or delete: ask(text, title) with detail (the delete's
+    /// reference list) below 3I's text; false = No, leave the deck alone. Other entities are not asked here.
+    public static bool CascadeConfirmed(Entity e, string? detail, Func<string, string, bool> ask)
+    {
+        var (text, title) = e switch
+        {
+            Entity.Segment => (SegmentCascadeText, SegmentCascadeTitle),
+            Entity.Joint => (JointCascadeText, JointCascadeTitle),
+            _ => (null, null),
+        };
+        return text == null || ask(string.IsNullOrEmpty(detail) ? text : text + "\r\n\r\n" + detail, title!);
+    }
+
+    /// What Delete would pass its confirm: References plus the H.11 actuator warning.
+    public static List<RefSite> DeleteRefs(Deck d, Entity e, int n)
+    {
+        var refs = References(d, e, n);
+        if (H11Emptied(d, e == Entity.Actuator ? [n] : CascadedActuators(d, e, n)) is { } warn) refs.Add(warn);
+        return refs;
+    }
+
     /// Delete entity n. When anything still refers to it, confirm gets the list first and a false
     /// answer leaves the deck untouched (returns null). Returns what was removed, for Insert.
     public static EntityData? Delete(Deck d, Entity e, int n, Func<IReadOnlyList<RefSite>, bool> confirm)
@@ -122,8 +149,7 @@ public static class Renumber
         var kinds = Kinds(e);
         var cascade = Cascade(e);
         var acts = CascadedActuators(d, e, n);
-        var refs = References(d, e, n);
-        if (H11Emptied(d, e == Entity.Actuator ? [n] : acts) is { } warn) refs.Add(warn);
+        var refs = DeleteRefs(d, e, n);
         if (refs.Count > 0 && !confirm(refs)) return null;
 
         var data = new EntityData();

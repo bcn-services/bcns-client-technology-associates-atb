@@ -82,12 +82,14 @@ public class Scenarios
         r.Click(r.Cell("Weight Row 1"));
         r.Shot("segment-2-selected");
         Robot.Press(VirtualKeyShort.CONTROL, VirtualKeyShort.INSERT);
+        r.Answer(Renumber.SegmentCascadeTitle, "Yes");
         r.Cell($"Weight Row {segs}");                   // the grid grew by one row
         r.Shot("segment-inserted");
         r.SelectScreen("Joint Definition [B.3.A, B.3.B, B.3.C]");
         r.Click(r.Cell("Name Row 0"));
         r.Shot("joint-1-selected");
         Robot.Press(VirtualKeyShort.CONTROL, VirtualKeyShort.INSERT);
+        r.Answer(Renumber.JointCascadeTitle, "Yes");
         r.Cell($"Name Row {joints}");
         r.Shot("joint-inserted");
         r.SaveDeck(copy);
@@ -97,6 +99,37 @@ public class Scenarios
         r.RunDeck(Path.Combine(outDir, "2479_2_ins"));
         foreach (var ext in new[] { ".aou", ".t21" })
             Assert.True(new FileInfo(Path.Combine(outDir, "2479_2_ins" + ext)) is { Exists: true, Length: > 0 }, "missing 2479_2_ins" + ext);
+        Assert.Empty(r.Unexpected());
+    }
+
+    /// ATB 3I's cascade warning on Add row (segment screen): No leaves the deck as it was (Save writes the original
+    /// bytes back), Yes inserts the copy and the grid grows by one row.
+    [Fact]
+    public void InsertSegmentWarning()
+    {
+        const string rel = "cases/2479/2479_2.LIN";
+        var copy = Robot.TempCopy(rel, "inswarn");
+        int segs = Deck.Load(copy).SegmentCount;
+        using var r = new Robot("insert-segment-warning", copy);
+        r.SelectScreen(SegScreen);
+        r.Click(r.Cell("Weight Row 1"));
+        Robot.Press(VirtualKeyShort.CONTROL, VirtualKeyShort.INSERT);
+        var w = r.WaitDialog(Renumber.SegmentCascadeTitle);
+        r.Shot("segment-warning");
+        var text = r.DialogText(w);
+        Assert.Contains("You have inserted/deleted segments and this requires CASCADE UPDATE/DELETE", text);
+        Assert.Contains("other input cards referring these segments.  Continue?", text);
+        r.Click(r.Button(w, "No"));
+        Robot.UntilTrue(() => r.Dialog(Renumber.SegmentCascadeTitle) == null, 10, "warning closed");
+        Assert.Null(r.Main.FindFirstDescendant(r.A.ConditionFactory.ByName($"Weight Row {segs}")));
+        r.Shot("answered-no");
+        r.SaveDeck(copy);
+        Assert.Equal(File.ReadAllBytes(Path.Combine(Robot.Repo, rel)), File.ReadAllBytes(copy));
+        r.Click(r.Cell("Weight Row 1"));
+        Robot.Press(VirtualKeyShort.CONTROL, VirtualKeyShort.INSERT);
+        r.Answer(Renumber.SegmentCascadeTitle, "Yes");
+        r.Cell($"Weight Row {segs}");                   // the grid grew by one row
+        r.Shot("answered-yes");
         Assert.Empty(r.Unexpected());
     }
 
