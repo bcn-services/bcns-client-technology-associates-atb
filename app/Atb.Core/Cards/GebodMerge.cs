@@ -10,7 +10,7 @@ public sealed record GebodPlacement(GebodMode Mode, int Body = 0);
 /// Merges a GEBOD.ain body (B.2-B.6 cards) into a .lin deck, as ATB 3I's GEBOD form does (GEBOD.cs InsertHumanBody,
 /// Body.cs placement / DeleteBody, ATBUpdate.UpdateDueToBody). The .ain is read with the solver's fixed FORMATs and
 /// each line is written in the solver's AIN_CONVERT .lin layout (src/input_bcards.for, src/input_joints.for).
-/// Every segment and joint goes in through Renumber.Insert (Replace removes through Renumber.Delete), so all
+/// Every segment and joint goes in through Renumber.Insert (Replace's surplus goes out through Renumber.Delete), so all
 /// reference shifting is Renumber's. Returns a new deck; the one passed in is never touched.
 public static class GebodMerge
 {
@@ -34,28 +34,73 @@ public static class GebodMerge
         return starts;
     }
 
-    /// Replace body k: segments a..b and the joints into them, j0..j1 (its own NULL joint a-1 and joints a..b-1). Body 1
-    /// has no NULL joint, so the next body's (joint b) goes instead, or segment b+1 would hang off joint 1. Same deck
-    /// ATB 3I DeleteBody leaves.
-    static (int A, int B, int J0, int J1) ReplaceRange(Deck d, int k)
+    /// Body k's segments a..a+S-1 and its joints j..j+J-1: its own NULL joint a-1 then a..b-1, so J = S; body 1 has no
+    /// NULL joint (1..b-1, J = S-1) and the next body's NULL joint b is not one of its joints.
+    static (int A, int S, int J, int Jn) BodyRange(Deck d, int k)
     {
         var starts = BodyStarts(d);
-        int nb = starts.Count, nseg = Renumber.Count(d, Entity.Segment), njnt = Renumber.Count(d, Entity.Joint);
+        int nb = starts.Count;
         if (k < 1 || k > nb) throw new ArgumentOutOfRangeException(nameof(k), $"Body {k} is outside 1..{nb}.");
-        int a = starts[k - 1], b = k < nb ? starts[k] - 1 : nseg;
-        return (a, b, a > 1 ? a - 1 : 1, a > 1 ? b - 1 : Math.Min(b, njnt));
+        int a = starts[k - 1], s = (k < nb ? starts[k] : Renumber.Count(d, Entity.Segment) + 1) - a;
+        return (a, s, a > 1 ? a - 1 : 1, a > 1 ? s : s - 1);
     }
 
-    /// Every field outside body k that Replace removes, because it refers to one of the body's segments or joints
-    /// (Renumber.Delete cascades or blanks them). They are not retargeted onto the new body.
-    // ponytail: ATB 3I remaps these onto the new body instead of dropping them — open human decision; upgrade when it is made.
-    public static List<RefSite> ReplacedReferences(Deck d, int body)
+    /// Every field outside body k that Replace with a newSegments-segment GEBOD body drops: the ones naming a surplus
+    /// position, a segment or joint of the old body past the new body's count (Renumber.Delete cascades or blanks them).
+    /// References to the kept positions name the new body's segment or joint at the same position and are not listed.
+    public static List<RefSite> ReplacedReferences(Deck d, int body, int newSegments)
     {
-        var (a, b, j0, j1) = ReplaceRange(d, body);
-        var items = Enumerable.Range(j0, j1 - j0 + 1).Select(j => (Entity.Joint, j)).Concat(Enumerable.Range(a, b - a + 1).Select(s => (Entity.Segment, s))).ToList();
-        var own = items.SelectMany(x => Renumber.Owned(d, x.Item1, x.Item2).SelectMany(g => g)).ToHashSet();
-        return items.SelectMany(x => Renumber.References(d, x.Item1, x.Item2))
+        var (a, so, j, jo) = BodyRange(d, body);
+        int jn = a > 1 ? newSegments : newSegments - 1;
+        var own = Enumerable.Range(a, so).Select(s => (Entity.Segment, s)).Concat(Enumerable.Range(j, jo).Select(x => (Entity.Joint, x)))
+            .SelectMany(x => Renumber.Owned(d, x.Item1, x.Item2).SelectMany(g => g)).ToHashSet();
+        var surplus = Enumerable.Range(j + jn, Math.Max(jo - jn, 0)).Select(x => (Entity.Joint, x))
+            .Concat(Enumerable.Range(a + newSegments, Math.Max(so - newSegments, 0)).Select(s => (Entity.Segment, s)));
+        return surplus.SelectMany(x => Renumber.References(d, x.Item1, x.Item2))
             .Where(s => !own.Contains(d.Lines[s.Line - 1])).Distinct().OrderBy(s => s.Line).ToList();
+    }
+
+    /// ATB 3I Replace (GEBOD.cs:1766-1800 update list, ATBUpdate.UpdateDueToBody / UpdateOtherTable): the old body's
+    /// segment or joint i becomes the new body's i-th, so references to it stay; surplus old positions go through
+    /// Renumber.Delete (highest first), extra new ones through Renumber.Insert after the kept positions, and the kept
+    /// positions' own lines (B.2, B.6, G.3.a; B.3-B.5) are swapped for GEBOD's. The body count does not change (no G.2).
+    static Deck Replace(Deck d, int k, List<Seg> segs, List<Jnt> jnts, Func<IReadOnlyList<RefSite>, bool> confirm)
+    {
+        var (a, so, j, jo) = BodyRange(d, k);
+        int sn = segs.Count, jn = a > 1 ? sn : sn - 1;
+        var sites = ReplacedReferences(d, k, sn);
+        if (sites.Count > 0 && !confirm(sites)) throw new OperationCanceledException("Replace declined; the deck is unchanged.");
+        var newJ = (a > 1 ? [NullJoint()] : new List<EntityData>()).Concat(jnts.Select(x => JointData(x, a - 1))).ToList();
+        for (int s = a + so - 1; s >= a + sn; s--) Renumber.Delete(d, Entity.Segment, s, _ => true);   // confirmed above, as one list
+        for (int x = j + jo - 1; x >= j + jn; x--) Renumber.Delete(d, Entity.Joint, x, _ => true);
+        for (int i = so; i < sn; i++) Renumber.Insert(d, Entity.Segment, a + i, SegData(segs[i]));
+        for (int i = jo; i < jn; i++) Renumber.Insert(d, Entity.Joint, j + i, newJ[i]);           // Seg JNT final: no segment moves after this
+        for (int i = 0; i < Math.Min(so, sn); i++) Swap(d, Entity.Segment, a + i, SegData(segs[i]));
+        for (int i = 0; i < Math.Min(jo, jn); i++) Swap(d, Entity.Joint, j + i, newJ[i]);
+        return d;
+    }
+
+    /// Entity n's own lines, group by group, become data's (no reference anywhere changes).
+    static void Swap(Deck d, Entity e, int n, EntityData data)
+    {
+        var old = Renumber.Owned(d, e, n);
+        for (int g = 0; g < old.Count && g < data.Groups.Count; g++)
+        {
+            if (old[g].Count == 0) continue;
+            int at = d.Lines.IndexOf(old[g][0]);
+            d.Lines.RemoveAll(old[g].Contains);
+            d.Lines.InsertRange(at, data.Groups[g]);
+        }
+    }
+
+    static EntityData SegData(Seg s)
+    {
+        var data = new EntityData();
+        data.Groups.Add(s.B2b == null ? [s.B2a] : [s.B2a, s.B2b]);
+        data.Groups.Add([s.B6]);
+        data.Groups.Add([Line("G.3.A", Zeros(10))]);
+        data.Values.AddRange(["0", "0", "0"]);                            // D.7, F.3.A, F.7.A: ATBUpdate adds D7 rows as 0
+        return data;
     }
 
     /// confirm is asked once, for Replace only, with ReplacedReferences when there are any; false throws
@@ -74,48 +119,28 @@ public static class GebodMerge
         var starts = BodyStarts(d);
         int nb = starts.Count, k = p.Body;
         if (p.Mode != GebodMode.Add && (k < 1 || k > nb)) throw new ArgumentOutOfRangeException(nameof(p), $"Body {k} is outside 1..{nb}.");
-        int s0;
-        bool newBody = true;
-        switch (p.Mode)
+        if (p.Mode == GebodMode.Replace) return Replace(d, k, segs, jnts, confirm);
+        int s0 = p.Mode switch
         {
-            case GebodMode.Add: s0 = nseg + 1; break;
-            case GebodMode.InsertBefore: s0 = starts[k - 1]; break;
-            case GebodMode.InsertAfter: s0 = k < nb ? starts[k] : nseg + 1; break;
-            default:
-                var (a, b, j0, j1) = ReplaceRange(d, k);
-                var sites = ReplacedReferences(d, k);
-                if (sites.Count > 0 && !confirm(sites)) throw new OperationCanceledException("Replace declined; the deck is unchanged.");
-                for (int j = j1; j >= j0; j--) Renumber.Delete(d, Entity.Joint, j, _ => true);   // confirmed above, as one list
-                for (int s = b; s >= a; s--) Renumber.Delete(d, Entity.Segment, s, _ => true);
-                s0 = a; newBody = false;
-                break;
-        }
+            GebodMode.Add => nseg + 1,
+            GebodMode.InsertBefore => starts[k - 1],
+            _ => k < nb ? starts[k] : nseg + 1,
+        };
         bool others = Renumber.Count(d, Entity.Segment) > 0;
         int bodyIndex = BodyStarts(d).Count(s => s < s0) + 1;
 
-        for (int i = 0; i < segs.Count; i++)
-        {
-            var data = new EntityData();
-            data.Groups.Add(segs[i].B2b == null ? [segs[i].B2a] : [segs[i].B2a, segs[i].B2b!]);
-            data.Groups.Add([segs[i].B6]);
-            data.Groups.Add([Line("G.3.A", Zeros(10))]);
-            data.Values.AddRange(["0", "0", "0"]);                        // D.7, F.3.A, F.7.A: ATBUpdate adds D7 rows as 0
-            Renumber.Insert(d, Entity.Segment, s0 + i, data);
-        }
+        for (int i = 0; i < segs.Count; i++) Renumber.Insert(d, Entity.Segment, s0 + i, SegData(segs[i]));
         // GEBOD numbers its segments 1..NSEGS; the body's segments are now s0..s0+NSEGS-1 (the ain's own numbers, placed).
         int first = s0 > 1 ? s0 - 1 : 1;
         if (s0 > 1) Renumber.Insert(d, Entity.Joint, first++, NullJoint());
         for (int i = 0; i < jnts.Count; i++) Renumber.Insert(d, Entity.Joint, first + i, JointData(jnts[i], s0 - 1));
         if (s0 == 1 && others) Renumber.Insert(d, Entity.Joint, segs.Count, NullJoint());   // roots the old first body
 
-        if (newBody)
-        {
-            // ATBUpdate.UpdateDueToBody: G.1 if missing, and a blank G.2 row at the new body's number.
-            if (d.Card("G.1") == null) d.Lines.Insert(Renumber.Place(d, "G.1"), Line("G.1", Zeros(2)));
-            var g2 = d.Cards("G.2").ToList();
-            int at = bodyIndex <= g2.Count ? d.Lines.IndexOf(g2[bodyIndex - 1]) : g2.Count > 0 ? d.Lines.IndexOf(g2[^1]) + 1 : Renumber.Place(d, "G.2");
-            d.Lines.Insert(at, Line("G.2", Zeros(8)));
-        }
+        // ATBUpdate.UpdateDueToBody: G.1 if missing, and a blank G.2 row at the new body's number.
+        if (d.Card("G.1") == null) d.Lines.Insert(Renumber.Place(d, "G.1"), Line("G.1", Zeros(2)));
+        var g2 = d.Cards("G.2").ToList();
+        int at = bodyIndex <= g2.Count ? d.Lines.IndexOf(g2[bodyIndex - 1]) : g2.Count > 0 ? d.Lines.IndexOf(g2[^1]) + 1 : Renumber.Place(d, "G.2");
+        d.Lines.Insert(at, Line("G.2", Zeros(8)));
         // ponytail: list cards Renumber.Insert skips when absent (empty deck) are created here as zeros; F.7.A only exists with wind (NWINDF > 0).
         EnsureList(d, "D.7", d.SegmentCount);
         EnsureList(d, "F.3.A", d.SegmentCount);

@@ -255,10 +255,16 @@ public sealed class MainForm : Form
         return (lines.Count, string.Join("\n", lines.Take(25)) + (lines.Count > 25 ? $"\n... and {lines.Count - 25} more" : ""));
     }
 
-    bool ConfirmReplace(IReadOnlyList<RefSite> refs)
+    /// ATB 3I Body.cs:1049, asked before GEBOD runs (title, buttons and icon as 3I's MessageBox).
+    bool ConfirmReplace() =>
+        MessageBox.Show(this, GebodForm.ReplaceText, "Replace Body Using GEBOD", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
+
+    /// After the run, only when the new body is shorter and references to the surplus positions would be dropped
+    /// (3I drops them without a list; the count is not known before GEBOD runs).
+    bool ConfirmDropped(IReadOnlyList<RefSite> refs)
     {
         var (count, list) = RefList(refs);
-        var text = GebodForm.ReplaceText + "\n\n" + (count == 0 ? "No other card refers to this body." : $"These {count} line(s) lose their reference to the body:\n\n" + list);
+        var text = $"The GEBOD body has fewer segments than the body it replaces. These {count} line(s) refer to the surplus segments or joints and lose that reference:\n\n{list}\n\nContinue?";
         return MessageBox.Show(this, text, "GEBOD", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes;
     }
 
@@ -448,8 +454,7 @@ public sealed class MainForm : Form
         using var f = new GebodForm(bodies);
         if (f.ShowDialog(this) != DialogResult.OK || f.Request == null) return;
         var place = f.Placement;
-        IReadOnlyList<RefSite> replaced = [];
-        if (place.Mode == GebodMode.Replace && !ConfirmReplace(replaced = GebodMerge.ReplacedReferences(target, place.Body))) return;
+        if (place.Mode == GebodMode.Replace && !ConfirmReplace()) return;
         var req = f.Request; var dims = f.BodyDims; string? ain = null;
         var exe = Path.Combine(AppContext.BaseDirectory, "Gebodv.exe");
         var work = Path.Combine(SolverRun.ShortWorkRoot(), "gebod");
@@ -494,8 +499,8 @@ public sealed class MainForm : Form
         if (GebodMerge.BodyStarts(target).Count is var now && now != bodies)
         { OfferSaveAin(ain!, $"The deck had {bodies} bodies when GEBOD started and has {now} now, so the chosen placement is out of date. The deck is unchanged."); return; }
         Deck merged;
-        // Works on a copy: a failure leaves the open deck as it was. Asks again only if the references changed during the run.
-        try { merged = GebodMerge.Merge(target, ain!, place, sites => sites.SequenceEqual(replaced) || ConfirmReplace(sites)); }
+        // Works on a copy: a failure leaves the open deck as it was.
+        try { merged = GebodMerge.Merge(target, ain!, place, ConfirmDropped); }
         catch (OperationCanceledException) { OfferSaveAin(ain!, "Replace cancelled. The deck is unchanged."); return; }
         catch (Exception ex) { OfferSaveAin(ain!, "GEBOD output could not be merged: " + ex.Message); return; }
         if (deck == null) deckPath = null;

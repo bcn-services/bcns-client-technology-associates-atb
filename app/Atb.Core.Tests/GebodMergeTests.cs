@@ -137,51 +137,98 @@ public class GebodMergeTests
         Assert.Equal("2 34 18 0 0 0 0", Toks(d.Card("H.2.A")!));
     }
 
+    /// The fixture cut to its first n segments and n-1 joints, built from the .ain schema (every fixture segment has
+    /// LPMI 1, so a B.2.b line; no joint has spin cards): no client deck has a body longer than GEBOD's 15 segments.
+    internal static string SmallAin(int n)
+    {
+        var l = Ain.Split('\n').Select(x => x.TrimEnd('\r')).ToList();
+        var cut = new List<string> { $"{n,6}{n - 1,6}" + l[0][12..] };
+        cut.AddRange(l.GetRange(1, 2 * n));                                // B.2.a + B.2.b
+        cut.AddRange(l.GetRange(31, 2 * (n - 1)));                         // B.3.a + B.3.b
+        cut.AddRange(l.GetRange(59, n - 1));                               // B.4.a
+        cut.AddRange(l.GetRange(73, n - 1));                               // B.5.a
+        cut.AddRange(l.GetRange(87, n));                                   // B.6
+        return string.Join("\n", cut) + "\n";
+    }
+
+    /// ATB 3I Replace (GEBOD.cs:1766-1800): body 1 (RN, DR) gets 15 GEBOD segments. References to old segments 1, 2 still
+    /// name segments 1, 2 (now GEBOD's LT, CT); segments 3.. and the vehicle move up by 15 - 2 through Renumber.Insert.
     [Fact]
-    public void ReplaceBody1_RemovesItsSegmentsAndJointsThenInserts()
+    public void ReplaceBody1_KeepsRefsByPosition_AndShiftsLaterOnesByTheDifference()
     {
         var o = D2479();
-        var d = GebodMerge.Merge(o, Ain, new(GebodMode.Replace, 1), _ => true);
-        Assert.Equal("30 29 \"\" 0", Toks(d.Card("B.1")!));                // 17-2+15 segments; 16-2+14+1 joints
+        bool asked = false;
+        var d = GebodMerge.Merge(o, Ain, new(GebodMode.Replace, 1), _ => asked = true);
+        // Written out: 2479 F.1.b line 209 "1 19 1 50 1 0 1 3 1 -1 0" (plane 1, vehicle 19, contact segment 1 of the
+        // replaced body, ellipsoid 50): segment 1 stays 1, vehicle 19 -> 32, ellipsoid 50 -> 63.
+        Assert.Equal("1 32 1 63 1 0 1 3 1 -1 0", Toks(d.Cards("F.1.B").First()));
+        Assert.Equal("2 32 1 1 2", Toks(d.Card("H.6")!));                  // H.6 "2 19 1 1 2": segments 1, 2 kept
+        Assert.Contains("2 32 16 16 10 0 11 3 12 -2 0", d.Cards("F.1.B").Select(Toks));   // line 217 "2 19 3 3 ...": 3 -> 16
+        Assert.Equal("2 32 16 0 0 0 0", Toks(d.Card("H.2.A")!));           // H.2.a "2 19 3 ...": 3 -> 16
+        Assert.Equal("1 71 16 16 10 0 11 3 13 0", Toks(d.Cards("F.3.B").First()));   // F.3.b "1 58 3 3 ...": ellipsoid 58 -> 71
+        Assert.False(asked);                                               // nothing is dropped, so nothing to confirm
+        Assert.Equal(o.Cards("F.1.B").Count(), d.Cards("F.1.B").Count());
+
+        Assert.Equal("30 29 \"\" 0", Toks(d.Card("B.1")!));                // 17-2+15 segments; 16-1+14 joints
         Assert.Equal([1, 16], AssertSolverShape(d));
         Assert.DoesNotContain(d.Cards("B.2.A"), l => l.Str(0) is "RN" or "DR");
         Assert.Equal(LtB2a, Row(d, "B.2.A", 1).Raw);
-        Assert.Equal("\"NULL\" 0 0 0 0 0 0 0 0 0 0 0", Toks(Row(d, "B.3.A", 15)));
+        Assert.Equal(PB3a(1), Row(d, "B.3.A", 1).Raw);
+        Assert.Equal(Row(o, "B.3.A", 2).Raw, Row(d, "B.3.A", 15).Raw);    // body 2's NULL joint 2 -> 15, its own text
         Assert.Equal(2, d.Cards("G.2").Count());                           // same number of bodies: G.2 untouched (UpdateDueToBody bdyChange 0)
-        // Old joints 3..16 (body 2) are now 16..29 with Seg JNT moved by 15 - 2.
-        for (int j = 3; j <= 16; j++)
+        for (int j = 3; j <= 16; j++)                                      // old joints 3..16 (body 2) are now 16..29, Seg JNT + 13
         {
             var (a, b) = (Row(o, "B.3.A", j), Row(d, "B.3.A", j + 13));
             Assert.Equal(a.Str(0), b.Str(0));
             Assert.Equal(a.Int(1) + 13, b.Int(1));
         }
-        // Written out: 2479 F.1.b line 217 "2 19 3 3 ..." and H.2.a "2 19 3 ...": segments 3.. move by 15 - 2 and the
-        // vehicle segment 19 (NSEG + 2) becomes 32. F.1.b rows on segments 1-2 (line 209 "1 19 1 50 ...") are gone.
-        Assert.Contains("2 32 16 16 10 0 11 3 12 -2 0", d.Cards("F.1.B").Select(Toks));
-        Assert.DoesNotContain(d.Cards("F.1.B"), l => l.Tokens[0] == "1" && l.Tokens[2] is "1" or "2");
-        Assert.Equal("2 32 16 0 0 0 0", Toks(d.Card("H.2.A")!));
     }
 
+    /// A 3-segment GEBOD body replaces body 2 (segments 3..17, joints 2..16): positions 1-3 are kept (segments 3-5,
+    /// joints 2-4), surplus segments 6..17 and joints 5..16 go through Renumber.Delete, the vehicle moves down by 12.
     [Fact]
-    public void ReplaceBody1_ConfirmSeesTheRemovedReferences_AndDeclineChangesNothing()
+    public void ReplaceWithShorterBody_DropsSurplusRefs_AndShiftsLaterOnesDown()
     {
-        var src = D2479();
-        var before = src.Write();
+        var o = D2479();
+        var before = o.Write();
         IReadOnlyList<RefSite>? seen = null;
-        Assert.Throws<OperationCanceledException>(() => GebodMerge.Merge(src, Ain, new(GebodMode.Replace, 1), s => { seen = s; return false; }));
-        Assert.Equal(before, src.Write());
-        Assert.NotNull(seen);
-        Assert.Equal(GebodMerge.ReplacedReferences(src, 1), seen);
-        // 2479 line 209, F.1.b "1 19 1 50 ...": its Contact Segment is segment 1 of the replaced body; H.6 line 325 names segments 1, 2.
-        Assert.Contains(seen, s => s.Line == 209 && s.Field == "Contact Segment");
-        Assert.Contains(seen, s => s.Line == 325);
-        Assert.DoesNotContain(seen, s => s.Label.Contains("B.", StringComparison.OrdinalIgnoreCase));   // the body's own lines are not "references"
-
+        Assert.Throws<OperationCanceledException>(() => GebodMerge.Merge(o, SmallAin(3), new(GebodMode.Replace, 2), s => { seen = s; return false; }));
+        Assert.Equal(before, o.Write());
         IReadOnlyList<RefSite>? accepted = null;
-        var d = GebodMerge.Merge(src, Ain, new(GebodMode.Replace, 1), s => { accepted = s; return true; });
+        var d = GebodMerge.Merge(o, SmallAin(3), new(GebodMode.Replace, 2), s => { accepted = s; return true; });
+        // Shift: vehicle 19 -> 7, ellipsoid 50 -> 38 (F.1.b line 209 "1 19 1 50 ..."), H.2.a "2 19 3" -> "2 7 3".
+        Assert.Equal("1 7 1 38 1 0 1 3 1 -1 0", Toks(d.Cards("F.1.B").First()));
+        Assert.Equal("2 7 3 0 0 0 0", Toks(d.Card("H.2.A")!));
+        // Kept by position: F.1.b "2 19 3 3 ..." / "3 19 5 5 ..." still name segments 3 and 5 (GEBOD's LT and its 3rd segment).
+        Assert.Contains("2 7 3 3 10 0 11 3 12 -2 0", d.Cards("F.1.B").Select(Toks));
+        Assert.Contains("3 7 5 5 10 0 11 3 12 -2 0", d.Cards("F.1.B").Select(Toks));
+        // Dropped: every F.1.b row on segments 6..17 is gone (Renumber.Delete cascade), as ReplacedReferences listed.
+        Assert.Equal(o.Cards("F.1.B").Count(l => l.Int(2) is >= 6 and <= 17), o.Cards("F.1.B").Count() - d.Cards("F.1.B").Count());
+        Assert.Equal(GebodMerge.ReplacedReferences(o, 2, 3), seen);
         Assert.Equal(seen, accepted);
-        Assert.Equal("30 29 \"\" 0", Toks(d.Card("B.1")!));
-        Assert.Equal(before, src.Write());
+        Assert.Contains(seen!, s => s.Label.EndsWith("F.1.b", StringComparison.OrdinalIgnoreCase) && s.Field == "Contact Segment");
+        Assert.DoesNotContain(seen!, s => s.Label.Contains("B.", StringComparison.OrdinalIgnoreCase));   // the body's own lines are not "references"
+
+        Assert.Equal("5 4 \"\" 0", Toks(d.Card("B.1")!));                  // 17-12 segments, 16-12 joints
+        Assert.Equal([1, 3], AssertSolverShape(d));
+        Assert.Equal(LtB2a, Row(d, "B.2.A", 3).Raw);
+        Assert.Equal("\"NULL\" 0 0 0 0 0 0 0 0 0 0 0", Toks(Row(d, "B.3.A", 2)));
+        Assert.Equal(PB3a(3), Row(d, "B.3.A", 3).Raw);                    // GEBOD Seg JNT 1 -> segment 3
+        Assert.Equal(Row(o, "B.3.A", 1).Raw, Row(d, "B.3.A", 1).Raw);     // body 1 untouched
+    }
+
+    /// Body 1 (2 segments, joint 1) replaced by a 1-segment body: segment 2 and joint 1 are surplus; body 2's NULL joint
+    /// moves from 2 to 1 and every later reference down by 1.
+    [Fact]
+    public void ReplaceBody1WithShorterBody_MovesTheNextBodyDown()
+    {
+        var o = D2479();
+        var d = GebodMerge.Merge(o, SmallAin(1), new(GebodMode.Replace, 1), _ => true);
+        Assert.Equal("2 18 2 2 10 0 11 3 12 -2 0", Toks(d.Cards("F.1.B").Single(l => l.Int(0) == 2 && l.Int(2) == 2)));   // "2 19 3 3 ..."
+        Assert.Equal("16 15 \"\" 0", Toks(d.Card("B.1")!));
+        Assert.Equal([1, 2], AssertSolverShape(d));
+        Assert.Equal(Row(o, "B.3.A", 2).Raw, Row(d, "B.3.A", 1).Raw);
+        Assert.Equal(LtB2a, Row(d, "B.2.A", 1).Raw);
     }
 
     [Fact]
