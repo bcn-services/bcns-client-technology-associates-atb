@@ -1,190 +1,37 @@
 # Engineer Report
-**Task:** Round 1b E — full Windows e2e pass + GEBOD UI scenario (New > Tools>GEBOD 50th adult male > add as new body > Save > Run)
-**Branch:** r1b-run-overwrite
-**Date:** 2026-09-12
-
-- Branch: r1b-run-overwrite; tested code commit bcfad2b; checkpoint commit adds this report on top (written by the orchestrator: the subagent's report write was blocked by the harness)
-- Run: https://github.com/bcn-services/bcns-client-technology-associates-atb/actions/runs/34735611144 — success (push-triggered on bcfad2b; workflow_dispatch unavailable off main; 3 of 5 pushes used)
-- CI: UI scenarios 29/29 (NewGebodSaveRun, 13 ViewerPlayStep, 12 GridEditSave, Run2479, InsertSegmentRun, ViewerErrorDetector_TripsOnTruncatedSa1); GebodProbe 1/1; tokendiff OK; CROSS/GATE PASS
-- Framing: (b) — ours matches 3I: AutoCamera=true (ATB3I/FileManager.cs:2718), viewAll once at load (ATB3I/Animation.cs:1195-1197); ours Sa1Scene.cs:172. Viewer scenarios add a camera-follow shot via the "Camera" combo (AccessibleName) using 3I's segment camera (Animation.cs:1476, Upward=0 FileManager.cs:2825), torso (CT) preferred
-- Mutation (1): SolverJob.AouEndedNormally → `return true;` and → `return i >= 0;` each reddened AouEndedNormally_OnlyWithTheClosingTimingBlock; restored byte-identical (cmp + git diff)
-- Mutation (2): N/A — framing math unchanged
-- Local: dotnet test app/Atb.sln 262 passed, 0 failed (baseline 261 + 1); UiTests build 0 warnings 0 errors
-- Screenshots: 165, all read (4 sonnet readers + engineer opus re-reads of every flagged frame + orchestrator spot-checks); only error dialog = view-truncated-control/02 (deliberate negative control)
+Branch: r2-gebod-replace
+Commit: fc3c82a (feat), report commit follows
+Tests: 1156 passed, 0 failed (floor 1151; +5)
+Run: https://github.com/bcn-services/bcns-client-technology-associates-atb/actions/runs/34905843854 (success: GebodReplaceBody1Run, InsertSegmentRun, NewGebodSaveRun all Passed)
+Date: 2026-09-14
+Task: GEBOD Replace follows ATB 3I's by-position rule (GEBOD.cs:1766-1800, ATBUpdate.UpdateDueToBody/UpdateOtherTable)
 
 ## Findings
-- OBJECTIVE CONFLICT (defaults unchanged): New+GEBOD deck has NSTEPS=0 → Run writes only gebod50m.aou, no .sa1, no viewer step; scenario asserts normal .aou completion ("The run ended at" + "Elapsed CPU time", src/date_time.for:168,179)
-- No body visible (3 frames): view-2479_2/05-camera-follow (Door/Floor plane between torso camera and body), view-2638_135_Restart_2a/06 (speck behind a wall), /07 (one ellipsoid past the wall). 3I's follow camera is rigid to the torso, so a plane can occlude; fixing would diverge from 3I — human decision
-- Body tiny but present: view-2495_2/02-04 (View all spans the golf-car track); 2819_5, 2893_5 (small occupant beside vehicle)
-- new-gebod-run/10-running already shows "Run finished in 1.6 s" (run beats the screenshot)
-- Camera-follow shots land on frame 1 though step-forward reached frame 2 — cosmetic, not investigated
+- GebodMerge.Replace: old seg/joint i -> new i via in-place Swap of own lines (B.2.a/b, B.6, G.3.a; B.3-B.5); surplus -> Renumber.Delete (highest first); extra -> Renumber.Insert after kept positions. No renumbering of its own.
+- ReplacedReferences(deck, body, newSegments) now lists only refs to surplus positions (own body lines excluded); ponytail note at GebodMerge.cs:51 removed.
+- Add / Insert before / Insert after paths are unchanged (all their existing tests pass).
+- Confirmation: 3I's Body.cs:1049 text ("Replace Body Using GEBOD", Yes/No, Question), asked once before GEBOD runs (GebodForm.ReplaceText, MainForm.ConfirmReplace).
+- FLAG for human: GEBOD's NSEGS (15/17/33) is unknown before the run, so when the new body is shorter a second "GEBOD" Yes/No dialog lists the dropped refs after the run (MainForm.ConfirmDropped); 3I drops them silently. Decline = deck unchanged.
+- Divergence (STANDARDS.md): 3I DeleteBody counts a non-last body's joints as a..b, leaving the next body's NULL-joint ref stale; we use a-1..b-1 (body 1: 1..b-1) so joint i maps to i.
+- STANDARDS.md had no drop-all line; added "GEBOD Replace is by position" under Body structure plus the divergence line.
+- Test 1 (literal lines, 2479_2 body 1 + gebod-50m.ain): ReplaceBody1_KeepsRefsByPosition_AndShiftsLaterOnesByTheDifference; deck validates, B.1 "30 29".
+- Test 2 (shorter body): no client deck has a GEBOD-shorter body, so SmallAin(n) cuts gebod-50m.ain to n segments per the .ain schema; ReplaceWithShorterBody_DropsSurplusRefs_AndShiftsLaterOnesDown (body 2, 3 segs, B.1 "5 4") and ReplaceBody1WithShorterBody_MovesTheNextBodyDown (body 1, 1 seg, B.1 "16 15").
+- Drop-all tests changed: ReplaceBody1_RemovesItsSegmentsAndJointsThenInserts -> ReplaceBody1_KeepsRefsByPosition_AndShiftsLaterOnesByTheDifference.
+- Drop-all tests changed: ReplaceBody1_ConfirmSeesTheRemovedReferences_AndDeclineChangesNothing -> ReplaceWithShorterBody_DropsSurplusRefs_AndShiftsLaterOnesDown.
+- Drop-all tests changed: ReplaceDecline_LeavesDeckByteIdentical_AndConfirmIsAskedOnce now uses shorter bodies (1,1),(2,3); ReplaceConfirmList_CoversEveryRefIntoTheReplacedBody -> ReplaceConfirmList_CoversEveryRefToASurplusPosition.
+- New QA tests: ReplaceWithLongerOrEqualBody_DoesNotAsk; Replace_EveryFamilyRef_KeepsItsPositionOrMovesByTheDifference(1,2); Merged() adds replace1small/replace2small.
+- Mutation (a) drop-all rule: FAIL at GebodMergeTests.cs:164 Assert.Equal expected "1 32 1 63 1 0 1 3 1 -1 0" actual "2 32 16 16 10 0 11 3 12 -2 0" (4 tests fail in total).
+- Mutation (b) skip shift (surplus segments removed without Renumber.Delete): FAIL at GebodMergeTests.cs:227 F.1.B Single() for the shifted row "2 18 2 2 ..." (5 tests fail in total).
+- Both mutations: cp backup, restored by cp, cmp byte-identical, git status clean.
+- Local solver src/atb completes (STOP 1, "ATB Simulation completed!") on replace1, replace2, replace1small, replace2small decks.
+- Robot GebodReplaceBody1Run: 11 screenshots viewed; confirm shows 3I text; status goes 17 segments/16 joints -> 30/29; GEBOD LT 24.87 at row 0, old body at row 15; run finished with .aou/.sa1/.t21-.t27.
 
 ## Files Changed
-- app/Atb.App.UiTests/Scenarios.cs, Robot.cs; app/Atb.App/GebodForm.cs, Viewer/AnimationForm.cs (AccessibleNames); app/Atb.Core/Solver/SolverJob.cs (AouEndedNormally) + SolverJobTests.cs; .github/workflows/app-e2e.yml
-
-## Screenshots (run 34735611144 artifact, all 165; S1-S4 = sonnet readers, O = engineer opus read)
-- `shots/edit-2479_2/01-opened.png` — ATB editor opened LIN file "ATB Gas Range Fall", 17 segments, tree list of cards. [S1]
-- `shots/edit-2479_2/02-segment-screen.png` — Segment Definition card selected, weight/inertia grid showing RN=112 for Gas Range. [S1]
-- `shots/edit-2479_2/03-edited.png` — RN weight cell edited to 113.25, status bar shows "CARD B.2.a Weight = 113.25". [S1]
-- `shots/edit-2479_2/04-saved.png` — File saved, status bar shows "Saved D:\a\_temp\w\edit\2479_2\2479_2.LIN". [S1]
-- `shots/edit-2495_2/01-opened.png` — ATB editor opened "ATB EZ-GO Golf Car" LIN, 34 segments, tree of definition cards. [S1]
-- `shots/edit-2495_2/02-segment-screen.png` — Segment Definition grid shown, LT (left thigh) weight 15.30887 selected. [S1]
-- `shots/edit-2495_2/03-edited.png` — LT weight cell edited to 16.5589, status bar confirms CARD B.2.a Weight change. [S1]
-- `shots/edit-2495_2/04-saved.png` — File saved, status bar shows "Saved D:\a\_temp\w\edit\2495_2\2495_2.LIN". [S1]
-- `shots/edit-2496_2/01-opened.png` — ATB editor opened "Fire Escape Fall Simulation" LIN, 17 segments, tree list. [S1]
-- `shots/edit-2496_2/02-segment-screen.png` — Segment Definition grid, LT weight 25.57151 selected for editing. [S1]
-- `shots/edit-2496_2/03-edited.png` — LT weight cell edited to 26.8215, status bar shows CARD B.2.a Weight = 26.8215. [S1]
-- `shots/edit-2496_2/04-saved.png` — File saved, status bar shows "Saved D:\a\_temp\w\edit\2496_2\2496_2.LIN". [S1]
-- `shots/edit-2513_2/01-opened.png` — ATB editor opened "Yamaha Concierge 4" LIN, 29 segments, tree list of cards. [S1]
-- `shots/edit-2513_2/02-segment-screen.png` — Segment Definition grid, CG (center of gravity) weight 1008 selected. [S1]
-- `shots/edit-2513_2/03-edited.png` — CG weight cell edited to 1009.25, status bar shows CARD B.2.a Weight = 1009.25. [S1]
-- `shots/edit-2513_2/04-saved.png` — File saved, status bar shows "Saved D:\a\_temp\w\edit\2513_2\2513_2.LIN". [S1]
-- `shots/edit-2589_10/01-opened.png` — ATB editor opened "Aircraft Luggage Fall" LIN, 31 segments, tree list of cards. [S1]
-- `shots/edit-2589_10/02-segment-screen.png` — Segment Definition grid, BAG weight 27.5 selected for editing. [S1]
-- `shots/edit-2589_10/03-edited.png` — BAG weight cell edited to 28.75, status bar shows CARD B.2.a Weight = 28.75. [S1]
-- `shots/edit-2589_10/04-saved.png` — File saved, status bar shows "Saved D:\a\_temp\w\edit\2589_10\2589_10.LIN". [S1]
-- `shots/edit-2638_135_Restart_2a/01-opened.png` — ATB editor opened "Gymnast Fall" LIN, 15 segments, tree list of cards. [S1]
-- `shots/edit-2638_135_Restart_2a/02-segment-screen.png` — Segment Definition grid, LT weight 19.24716 selected for editing. [S1]
-- `shots/edit-2638_135_Restart_2a/03-edited.png` — LT weight cell edited to 20.4972, status bar shows CARD B.2.a Weight = 20.4972. [S1]
-- `shots/edit-2638_135_Restart_2a/04-saved.png` — File saved, status bar shows "Saved D:\a\_temp\w\edit\2638_135_Restart_2a\2638_135_Restart_2a.LIN". [S1]
-- `shots/edit-2638_Start_135_/01-opened.png` — ATB editor opened same "Gymnast Fall" LIN (variant file), 15 segments, tree list. [S1]
-- `shots/edit-2638_Start_135_/02-segment-screen.png` — Segment Definition grid, LT weight 19.24716 selected for editing. [S1]
-- `shots/edit-2638_Start_135_/03-edited.png` — LT weight cell edited to 20.4972, status bar shows CARD B.2.a Weight = 20.4972. [S1]
-- `shots/edit-2638_Start_135_/04-saved.png` — File saved, status bar shows "Saved D:\a\_temp\w\edit\2638_Start_135_\2638_Start_135_.LIN". [S1]
-- `shots/edit-2657_4/01-opened.png` — ATB editor opened "Case # 2657: Slip & Fall" LIN, 15 segments, tree list of cards. [S1]
-- `shots/edit-2657_4/02-segment-screen.png` — Segment Definition grid, LT weight 29.92467 selected for editing. [S1]
-- `shots/edit-2657_4/03-edited.png` — LT weight cell edited to 31.1747, status bar shows CARD B.2.a Weight = 31.1747. [S1]
-- `shots/edit-2657_4/04-saved.png` — File saved, status bar shows "Saved D:\a\_temp\w\edit\2657_4\2657_4.LIN". [S1]
-- `shots/edit-2696_3/01-opened.png` — ATB editor opened "ATB EZ-GO Golf Car" LIN (variant file), 34 segments, tree list. [S1]
-- `shots/edit-2696_3/02-segment-screen.png` — Segment Definition grid, LT weight 15.30887 selected for editing. [S1]
-- `shots/edit-2696_3/03-edited.png` — LT weight cell edited to 16.5589, status bar shows CARD B.2.a Weight = 16.5589. [S1]
-- `shots/edit-2696_3/04-saved.png` — File saved, status bar shows "Saved D:\a\_temp\w\edit\2696_3\2696_3.LIN". [S1]
-- `shots/edit-2750_7/01-opened.png` — ATB editor opened "Case 2750 Car Into Pedestrian" LIN, 15 segments, tree list of cards. [S1]
-- `shots/edit-2750_7/02-segment-screen.png` — Segment Definition grid, LT weight 20.65071 selected for editing. [S1]
-- `shots/edit-2750_7/03-edited.png` — LT weight cell edited to 21.9007, status bar shows CARD B.2.a Weight = 21.9007. [S1]
-- `shots/edit-2750_7/04-saved.png` — File saved, status bar shows "Saved D:\a\_temp\w\edit\2750_7\2750_7.LIN". [S1]
-- `shots/edit-2819_5/01-opened.png` — ATB editor opened "Case 2819 Side Impact" LIN, 20 segments, tree list of cards. [S1]
-- `shots/edit-2819_5/02-segment-screen.png` — Segment Definition grid, CG (whole-body) weight 3114 shown, selected for editing. [S1]
-- `shots/edit-2819_5/03-edited.png` — Segment table shows FR weight edited to 30; status bar shows "CARD B.2.a Weight = 3115.25". [S2]
-- `shots/edit-2819_5/04-saved.png` — Same segment editor after save; status bar reads "Saved D:\a\_temp\w\edit\2819_5\2819_5.LIN". [S2]
-- `shots/edit-2893_5/01-opened.png` — 2893_5.LIN opened at Run Control; right panel shows Date/Comment "Case 2893 Side Impact" run header. [S2]
-- `shots/edit-2893_5/02-segment-screen.png` — Segment Definition screen showing CG row weight 3176; case identified as 22 segments, 21 joints. [S2]
-- `shots/edit-2893_5/03-edited.png` — Segment table with CG weight changed to 3177.25; status bar "CARD B.2.a Weight = 3177.25". [S2]
-- `shots/edit-2893_5/04-saved.png` — Segment editor after save; status bar "Saved D:\a\_temp\w\edit\2893_5\2893_5.LIN". [S2]
-- `shots/insert-segment-2479_2/01-segment-2-selected.png` — 2479_2.LIN segment table, DR (segment 2) row selected/highlighted for duplication. [S2]
-- `shots/insert-segment-2479_2/02-segment-inserted.png` — New duplicate DR row appears in segment table; status "Added segment 3 as a copy; references and count cards renumbered." [S2]
-- `shots/insert-segment-2479_2/03-joint-1-selected.png` — Joint Definition table, HNG joint row 1 (RN) selected for duplication. [S2]
-- `shots/insert-segment-2479_2/04-joint-inserted.png` — Duplicate HNG joint row added; status "Added joint 2 as a copy; references and count cards renumbered." [S2]
-- `shots/insert-segment-2479_2/05-saved.png` — Joint table after save; status bar "Saved D:\a\_temp\w\ins\2479_2.LIN". [S2]
-- `shots/insert-segment-2479_2/06-save-results-as-dialog.png` — "Save results as" file dialog, filename "2479_2_ins", type "ATB main output (*.aou)". [S2]
-- `shots/insert-segment-2479_2/07-running.png` — Separate console window "atb-win32.exe" running with a "Cancel" button visible; simulation in progress, no dialog. [S2]
-- `shots/insert-segment-2479_2/08-run-finished.png` — Informational dialog "ATB run — Run finished. Open the animation?" with Yes/No buttons; not an error. [S2]
-- `shots/new-gebod-run/01-launched.png` — ATB main window freshly launched, empty state, status "Open a .lin deck to begin." [S2]
-- `shots/new-gebod-run/02-new-deck.png` — New untitled simulation deck created; status "New Simulation: 0 segments, 0 joints, 24 lines." [S2]
-- `shots/new-gebod-run/03-gebod-form.png` — GEBOD V.2 dialog, "Add a new body after the last", Subject Type dropdown empty/unset. [S2]
-- `shots/new-gebod-run/04-gebod-filled.png` — GEBOD V.2 dialog filled: Subject Type "Adult Human Male", Weight/Height percentile 50, Run GEBOD button visible. [S2]
-- `shots/new-gebod-run/05-gebod-merged.png` — Back in ATB main window; status "New Simulation: 15 segments, 14 joints, 145 lines" after GEBOD merge. [S2]
-- `shots/new-gebod-run/06-segment-screen.png` — Segment Definition table populated with new GEBOD-derived segments (LT, CT, UT, etc.). [S2]
-- `shots/new-gebod-run/07-save-as-dialog.png` — "Save As" dialog, filename "gebod50m.lin", type "ATB input decks (*.lin)". [S2]
-- `shots/new-gebod-run/08-saved.png` — Window title now "ATB — gebod50m.lin"; status "Saved D:\a\_temp\w\gebod-new\gebod50m.lin". [S2]
-- `shots/new-gebod-run/09-save-results-as-dialog.png` — "Save results as" dialog, filename "gebod50m", output type "ATB main output (*.aou)". [S2]
-- `shots/new-gebod-run/10-running.png` — Status bar reads "Run finished in 1.6 s: gebod50m.aou" (run already completed by this shot); no dialog visible. [S2]
-- `shots/new-gebod-run/11-run-finished.png` — Same finished state, status bar unchanged "Run finished in 1.6 s: gebod50m.aou"; no dialog shown. [S2]
-- `shots/new-gebod-run/12-run-completed.png` — Identical finished state again, status bar "Run finished in 1.6 s: gebod50m.aou". [S2]
-- `shots/run-2479_2/01-opened.png` — 2479_2.LIN opened; status "ATB Gas Range Fall: 17 segments, 16 joints, 329 lines." [S2]
-- `shots/run-2479_2/02-save-results-as-dialog.png` — "Save results as" dialog, filename "2479_2_new", output type "ATB main output (*.aou)". [S2]
-- `shots/run-2479_2/03-running.png` — Separate "ATB run: 2479_2.LIN" console window (atb-win32.exe) executing, black terminal area, no dialog. [S2]
-- `shots/run-2479_2/04-run-finished.png` — Informational dialog "ATB run — Run finished. Open the animation?" with Yes/No; not an error. [S2]
-- `shots/view-2479_2/01-open-dialog.png` — Open file dialog in viewer, list of .sa1 animation files, "2479_2.sa1" selected. [S2]
-- `shots/view-2479_2/02-frame-0pct.png` — Viewer at frame 1/401 (t=0s): blue dummy figure draped over green box/table on yellow floor. Body visible (blue dummy torso/limbs). [S2]
-- `shots/view-2479_2/03-playing.png` — Viewer paused at frame 29/401 (t=0.28s), dummy in similar draped pose over green box. Body visible. [S2]
-- `shots/view-2479_2/04-step-forward.png` — Viewer at frame 2/401, dummy pose nearly identical to frame 1, same draped position. Body visible. [S2]
-- `shots/view-2479_2/05-camera-follow.png` — Camera CT, frame 1/401: yellow Door/Floor plane between camera and dummy, only a green edge shows; NO-BODY (occluded). [O]
-- `shots/view-2479_2/06-frame-50pct.png` — CT camera view at frame 201/401 (t=2s): close-up showing small blue ellipsoid segments (head/torso) against yellow background. Body visible. [S2]
-- `shots/view-2479_2/07-frame-100pct.png` — CT camera view at final frame 401/401 (t=4s), similar close-up with blue ellipsoids visible. Body visible. [S2]
-- `shots/view-2495_2/01-open-dialog.png` — Open file dialog, Documents folder shown (no .sa1 files listed there), filename field has "2495_2.sa1" typed in. [S2]
-- `shots/view-2495_2/02-frame-0pct.png` — View all (fixed), frame 1/601: whole golf-car track framed; small green cart with blue occupant; body visible but tiny. [O]
-- `shots/view-2495_2/03-playing.png` — View all (fixed), paused frame 30/601: same far framing as 02, cart+occupant tiny. [O]
-- `shots/view-2495_2/04-step-forward.png` — View all (fixed), frame 2/601: same far framing as 02, cart+occupant tiny. [O]
-- `shots/view-2495_2/05-camera-follow.png` — Camera set to "CT" follow view, zoomed-in showing green vehicle body with small blue dummy visible inside/behind. Body visible. [S2]
-- `shots/view-2495_2/06-frame-50pct.png` — Zoomed-out 3D scene, tiny blue/green dummy on diagonal yellow blade, t=3.0s frame 301/601; body visible. [S3]
-- `shots/view-2495_2/07-frame-100pct.png` — Same far view, end frame t=6.0s 601/601, tiny dummy visible on track; body visible. [S3]
-- `shots/view-2496_2/01-open-dialog.png` — File Open dialog, D:\a\_temp\w\view folder, 2496_2.sa1 selected in filename box. [S3]
-- `shots/view-2496_2/02-frame-0pct.png` — Viewer loaded, frame 1/601, "View all (fixed)" camera; dummy figure near top rail; body visible. [S3]
-- `shots/view-2496_2/03-playing.png` — Pause button active, frame 30/601, same dummy figure near rail; body visible. [S3]
-- `shots/view-2496_2/04-step-forward.png` — Step-forward (▶) highlighted, frame 2/601, same scene as prior; body visible. [S3]
-- `shots/view-2496_2/05-camera-follow.png` — Camera switched to "CT", frame 1/601, angled ramp view, running blue figure; body visible. [S3]
-- `shots/view-2496_2/06-frame-50pct.png` — Frame 301/601, camera CT, dummy sliding down green/yellow ramp; body visible. [S3]
-- `shots/view-2496_2/07-frame-100pct.png` — Frame 601/601, camera CT, dummy airborne off ramp edge; body visible. [S3]
-- `shots/view-2513_2/01-open-dialog.png` — File Open dialog, view folder, 2513_2.sa1 selected in filename box. [S3]
-- `shots/view-2513_2/02-frame-0pct.png` — Viewer loaded ("7/21/2021" deck), frame 1/401, tiny dummy far right; body visible. [S3]
-- `shots/view-2513_2/03-playing.png` — Pause active, frame 30/401, same tiny distant dummy; body visible. [S3]
-- `shots/view-2513_2/04-step-forward.png` — Step-forward highlighted, frame 2/401, same tiny dummy; body visible. [S3]
-- `shots/view-2513_2/05-camera-follow.png` — Camera set to CT, frame 1/401, small dummy centered on ramp; body visible. [S3]
-- `shots/view-2513_2/06-frame-50pct.png` — Frame 201/401, camera CT, small dummy centered; body visible. [S3]
-- `shots/view-2513_2/07-frame-100pct.png` — Frame 401/401, camera CT, small dummy centered, end of run; body visible. [S3]
-- `shots/view-2589_10/01-open-dialog.png` — File Open dialog, view folder, 2589_10.sa1 selected in filename box. [S3]
-- `shots/view-2589_10/02-frame-0pct.png` — Viewer loaded ("3/14/22" deck), frame 1/121, two seated dummies at table, green headrest above; bodies visible. [S3]
-- `shots/view-2589_10/03-playing.png` — Pause active, frame 29/121, same seated dummies at table; bodies visible. [S3]
-- `shots/view-2589_10/04-step-forward.png` — Step-forward highlighted, frame 2/121, same seated dummies; bodies visible. [S3]
-- `shots/view-2589_10/05-camera-follow.png` — Camera set to CT, closer view of standing/leaning dummy with green cushion overhead; bodies visible. [S3]
-- `shots/view-2589_10/06-frame-50pct.png` — Frame 61/121, camera CT, dummy with green-highlighted torso segment; bodies visible. [S3]
-- `shots/view-2589_10/07-frame-100pct.png` — Frame 121/121, camera CT, dummies in collapsed/leaning end pose; bodies visible. [S3]
-- `shots/view-2638_135_Restart_2a/01-open-dialog.png` — File Open dialog, view folder, 2638_135_Restart_2a.sa1 selected. [S3]
-- `shots/view-2638_135_Restart_2a/02-frame-0pct.png` — Viewer loaded ("1/30/23" deck), frame 1/201, twisted/tumbling blue body mid-air; body visible. [S3]
-- `shots/view-2638_135_Restart_2a/03-playing.png` — Pause active, frame 29/201, tumbling body mid-fall; body visible. [S3]
-- `shots/view-2638_135_Restart_2a/04-step-forward.png` — Step-forward highlighted, frame 2/201, tumbling body; body visible. [S3]
-- `shots/view-2638_135_Restart_2a/05-camera-follow.png` — Camera CT, frame 1/201: full dummy hanging from green bar above yellow mats; body visible. [O]
-- `shots/view-2638_135_Restart_2a/06-frame-50pct.png` — Camera CT, frame 101/201: yellow wall/mat planes fill view, only a blue speck at the wall edge; NO-BODY (occluded by wall plane). [O]
-- `shots/view-2638_135_Restart_2a/07-frame-100pct.png` — Camera CT, frame 201/201: yellow wall/mat planes, one blue ellipsoid peeking past the wall; body mostly occluded. [O]
-- `shots/view-2638_Start_135_/01-open-dialog.png` — File Open dialog, view folder, 2638_Start_135_.sa1 selected. [S3]
-- `shots/view-2638_Start_135_/02-frame-0pct.png` — Viewer loaded ("1/30/23" deck), frame 1/101, dummy sliding on ramp, segmented body; body visible. [S3]
-- `shots/view-2638_Start_135_/03-playing.png` — Pause active, frame 28/101, dummy sliding, segmented body; body visible. [S3]
-- `shots/view-2638_Start_135_/04-step-forward.png` — Step-forward highlighted, frame 2/101, dummy on ramp; body visible. [S3]
-- `shots/view-2638_Start_135_/05-camera-follow.png` — Camera CT, frame 1/101, standing dummy full body clearly shown; body visible. [S3]
-- `shots/view-2638_Start_135_/06-frame-50pct.png` — Frame 51/101, camera CT, dummy hanging in mid-air near yellow wall; body visible. [S3]
-- `shots/view-2638_Start_135_/07-frame-100pct.png` — Frame 101/101, camera CT, dummy hanging near ramp edge, end frame; body visible. [S3]
-- `shots/view-2657_4/01-open-dialog.png` — File Open dialog, view folder, 2657_4.sa1 selected in filename box. [S3]
-- `shots/view-2657_4/02-frame-0pct.png` — Viewer loaded ("3/30/23" deck), frame 1/101, standing blue dummy, floor list items; body visible. [S3]
-- `shots/view-2657_4/03-playing.png` — Pause active, frame 28/101, dummy in running/lunging pose; body visible. [S3]
-- `shots/view-2657_4/04-step-forward.png` — Step-forward highlighted, frame 2/101, dummy standing pose; body visible. [S3]
-- `shots/view-2657_4/05-camera-follow.png` — Camera CT, frame 1/101: full blue dummy mid-stride on yellow floor; body visible. [O]
-- `shots/view-2657_4/06-frame-50pct.png` — CT camera-follow, running dummy mid-stride at frame 51/101, t=0.5s, yellow ramp. [S4]
-- `shots/view-2657_4/07-frame-100pct.png` — CT camera, dummy in leaping pose at final frame 101/101, t=1.0s. [S4]
-- `shots/view-2696_3/01-open-dialog.png` — File Open dialog, D:\a\_temp\w\view folder, "2696_3.sa1" selected in filename box. [S4]
-- `shots/view-2696_3/02-frame-0pct.png` — Fixed view-all camera, two dummies seated on green wheeled cart/vehicle, frame 1/601, t=0. [S4]
-- `shots/view-2696_3/03-playing.png` — Fixed camera zoomed close on cart wheel/seat area, dummies mostly occluded, frame 31/601. [S4]
-- `shots/view-2696_3/04-step-forward.png` — Fixed camera, two seated dummies on green cart visible, frame 2/601, Play button showing. [S4]
-- `shots/view-2696_3/05-camera-follow.png` — CT camera close-up on two dummies seated in green vehicle, frame 1/601. [S4]
-- `shots/view-2696_3/06-frame-50pct.png` — Camera CT, frame 301/601: 4-6 blue occupant ellipsoids over yellow ground; body visible. [O]
-- `shots/view-2696_3/07-frame-100pct.png` — Camera CT, frame 601/601: blue occupant ellipsoids over yellow ground; body visible. [O]
-- `shots/view-2750_7/01-open-dialog.png` — File Open dialog, view folder, "2750_7.sa1" selected in filename box. [S4]
-- `shots/view-2750_7/02-frame-0pct.png` — View-all fixed camera, ramp/wall geometry, small dummy legs barely visible at bottom, frame 1/201. [S4]
-- `shots/view-2750_7/03-playing.png` — View-all fixed camera, dummy crumpled/tumbling near ramp base, frame 61/201, t=0.3s. [S4]
-- `shots/view-2750_7/04-step-forward.png` — View-all fixed camera, dummy tumbling near ramp corner, frame 2/201, Play arrow shown. [S4]
-- `shots/view-2750_7/05-camera-follow.png` — CT camera, dummy walking/striding pose near ramp steps, frame 1/201. [S4]
-- `shots/view-2750_7/06-frame-50pct.png` — Camera CT, frame 101/201: yellow ground, one blue body ellipsoid in view; body visible (small). [O]
-- `shots/view-2750_7/07-frame-100pct.png` — CT camera, dummy tumbling mid-air over yellow ramp, frame 201/201 (final). [S4]
-- `shots/view-2819_5/01-open-dialog.png` — Open dialog, view folder, filename D:\a\_temp\w\view\2819_5.sa1. [O]
-- `shots/view-2819_5/02-frame-0pct.png` — View all (fixed), frame 1/401: yellow vehicle on ground, 3 green tyre spheres, one blue body ellipsoid; body visible (small). [O]
-- `shots/view-2819_5/03-playing.png` — View all, paused frame 71/401: vehicle + 3 blue body ellipsoids; body visible (small). [O]
-- `shots/view-2819_5/04-step-forward.png` — View all, frame 2/401: same as 02; body visible (small). [O]
-- `shots/view-2819_5/05-camera-follow.png` — Camera CT, frame 1/401: yellow ground/arrow plane, green tyre, one blue ellipsoid; body visible (small). [O]
-- `shots/view-2819_5/06-frame-50pct.png` — Camera CT, frame 201/401: vehicle side, green tyre, two blue ellipsoids; body visible (small). [O]
-- `shots/view-2819_5/07-frame-100pct.png` — Camera CT, frame 401/401: same as 06, two blue ellipsoids; body visible (small). [O]
-- `shots/view-2893_5/01-open-dialog.png` — Open dialog, view folder, filename D:\a\_temp\w\view\2893_5.sa1. [O]
-- `shots/view-2893_5/02-frame-0pct.png` — View all (fixed), frame 1/501: yellow ground plane, vehicle with 4 green tyres, blue occupant inside; body visible. [O]
-- `shots/view-2893_5/03-playing.png` — View all, paused frame 60/501: vehicle moved right, blue occupant clearly visible; body visible. [O]
-- `shots/view-2893_5/04-step-forward.png` — View all, frame 2/501: same as 02; body visible. [O]
-- `shots/view-2893_5/05-camera-follow.png` — Camera CT, frame 1/501: vehicle + blue occupant centred, tyres; body visible (small). [O]
-- `shots/view-2893_5/06-frame-50pct.png` — Camera CT, frame 251/501: tumbling vehicle, blue occupant ellipsoid inside; body visible (small). [O]
-- `shots/view-2893_5/07-frame-100pct.png` — Camera CT, frame 501/501: vehicle on its side, blue ellipsoid under it; body visible (small). [O]
-- `shots/view-sledout/01-open-dialog.png` — Open dialog, view folder, filename D:\a\_temp\w\view\sledout.sa1. [O]
-- `shots/view-sledout/02-frame-0pct.png` — View all (fixed), frame 1/41: seated blue dummy in yellow seat rig, green pad, red belts; body visible. [O]
-- `shots/view-sledout/03-playing.png` — View all, paused frame 22/41: same seated dummy; body visible. [O]
-- `shots/view-sledout/04-step-forward.png` — View all, frame 2/41: same seated dummy; body visible. [O]
-- `shots/view-sledout/05-camera-follow.png` — Camera CT, frame 1/41: closer seated dummy, full body; body visible. [O]
-- `shots/view-sledout/06-frame-50pct.png` — Camera CT, frame 21/41: seated dummy, full body; body visible. [O]
-- `shots/view-sledout/07-frame-100pct.png` — Camera CT, frame 41/41: seated dummy final pose, full body; body visible. [O]
-- `shots/view-truncated-control/01-open-dialog.png` — Open dialog (2479_2 folder), filename D:\a\_temp\w\view\truncated.sa1 — negative-control setup, no error yet. [O]
-- `shots/view-truncated-control/02-error-dialog.png` — ERROR DIALOG, DELIBERATE NEGATIVE CONTROL: 'Cannot open .sa1 — unexpected end of .sa1 object section'. [O]
+- app/Atb.Core/Cards/GebodMerge.cs: by-position Replace, BodyRange, Swap, SegData; ReplacedReferences(body, newSegments).
+- app/Atb.App/GebodForm.cs: ReplaceText = 3I Body.cs:1049 text.
+- app/Atb.App/MainForm.cs: ConfirmReplace before the run, ConfirmDropped after the run (surplus only).
+- app/Atb.Core.Tests/GebodMergeTests.cs: rewritten Replace tests, SmallAin helper.
+- app/Atb.Core.Tests/GebodMergeQaTests.cs: Replace QA tests updated to the 3I rule, plus the new ones above.
+- app/Atb.App.UiTests/Scenarios.cs: GebodReplaceBody1Run.
+- STANDARDS.md: by-position rule and the joint-range divergence.
+- Note: engineer-report.md was already deleted in the worktree before this spawn; this file replaces it.
