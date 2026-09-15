@@ -1,0 +1,523 @@
+using System.Globalization;
+using System.Runtime.CompilerServices;
+using Atb.Core.Lin;
+
+namespace Atb.Core.Cards;
+
+public enum Entity { Segment, Joint, Plane, Vehicle, Actuator }
+
+/// One field that refers to an entity: 1-based deck line, that line's label, the schema field name.
+public sealed record RefSite(int Line, string Label, string Field);
+
+/// An entity's own lines and its per-entity list values (D.7, F.3.A, ...), as Delete took them out
+/// or Copy made them. Insert puts exactly these lines back, so Delete then Insert is lossless.
+public sealed class EntityData
+{
+    internal List<List<DeckLine>> Groups { get; } = new();   // one per owned group, in Groups(e) order
+    internal List<string> Values { get; } = new();           // one per Lists(e) card
+}
+
+/// Insert or delete a segment, joint, plane or vehicle and renumber every reference to it, using
+/// the reference kinds marked in CardSchema (an unmarked field is never touched). Behaviour copies
+/// ATB 3I ATBUpdate.UpdateSegmentID / UpdateJointID / UpdatePlaneID (decomp ATB3I.Util/ATBUpdate.cs):
+/// insert shifts refs >= n up by one; delete removes rows of the cascade cards that refer to n,
+/// clears the other refs to n, and shifts refs > n down by one. Count cards follow by exactly one.
+public static class Renumber
+{
+    static string[][] Groups(Entity e) => e switch
+    {
+        Entity.Segment => [["B.2.A", "B.2.B"], ["B.6"], ["G.3.A"]],
+        Entity.Joint => [["B.3.A", "B.3.B", "B.3.C"], ["B.4.A", "B.4.B"], ["B.5.A", "B.5.B", "B.5.C"]],
+        Entity.Plane => [["D.2.A", "D.2.B", "D.2.C", "D.2.D"]],
+        Entity.Actuator => [["F.10"]],
+        _ => [["C.1"]],                                       // a vehicle is its whole C.1..C.5 block
+    };
+
+    /// Cards holding one value per entity, 18 to a line.
+    static string[] Lists(Entity e) => e switch
+    {
+        Entity.Segment => ["D.7", "F.3.A", "F.7.A"],
+        Entity.Joint => ["F.4.A"],
+        Entity.Plane => ["F.1.A"],
+        _ => [],
+    };
+
+    // Ellipsoid numbers share the segment numbering, and a vehicle is a segment numbered after the body's.
+    static Kind[] Kinds(Entity e) => e switch
+    {
+        Entity.Joint => [Kind.JointRef],
+        Entity.Plane => [Kind.PlaneRef],
+        Entity.Actuator => [Kind.ActRef],
+        _ => [Kind.SegRef, Kind.EllipRef],
+    };
+
+    static string Owner(Entity e) => e switch { Entity.Segment => "B.2.A", Entity.Joint => "B.3.A", Entity.Plane => "D.2.A", Entity.Actuator => "F.10", _ => "C.1" };
+
+    /// Rows ATB 3I deletes with the entity (delCascade = true) and the count each one is tallied in.
+    /// Index -1: the count is a list value, indexed by the row's first field (F.1.B Plane, F.3.B Segment A, F.4.B Joint).
+    static Dictionary<string, (string Card, int Index)> Cascade(Entity e) => e switch
+    {
+        Entity.Joint => new() { ["F.10"] = ("D.1.B", 0), ["F.4.B"] = ("F.4.A", -1) },
+        Entity.Plane => new() { ["F.1.B"] = ("F.1.A", -1) },
+        Entity.Actuator => new(),
+        _ => new()
+        {
+            ["D.5"] = ("D.1.A", 3), ["D.6"] = ("D.1.A", 4), ["D.8"] = ("D.1.A", 5), ["D.9"] = ("D.1.A", 9),
+            ["F.1.B"] = ("F.1.A", -1), ["F.3.B"] = ("F.3.A", -1), ["F.10"] = ("D.1.B", 0),
+            // ATBUpdate.cs:237 F2b delCascade (default true); its resetRID "BeltID" is not copied: NJ must stay the belt's
+            // ordinal (input_belt_force.for:109), so compacting it breaks the deck (STANDARDS.md "ATB 3I divergences").
+            ["F.2.B"] = ("F.2.A", -1),
+        },
+    };
+
+    /// Output lists whose entries are removed (and the leading count dropped) instead of cleared: key = index of the count.
+    /// H.1-H.3 rows span lines and are reflowed by DropH13Rows instead.
+    static readonly Dictionary<string, int> CountLed = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["H.4"] = 0, ["H.5"] = 0, ["H.6"] = 0, ["H.7"] = 0, ["H.8"] = 0, ["H.9"] = 0, ["H.10.B"] = 1,
+        ["H.11"] = 0,   // STANDARDS.md "ATB 3I divergences" H.11
+        ["F.6"] = 1,    // ATBUpdate.cs:242 F6 delCascade: the (Contact Segment, Contact Ellip) pair goes, NK drops by one
+    };
+
+    // ATB 3I noDataMark for the non-cascade tables: B3B4B5M and C1C2a use -1, the others 0.
+    static string Blank(string card) => card is "B.3.A" or "C.2.A" ? "-1" : "0";
+
+    public static int Count(Deck d, Entity e) => d.Cards(Owner(e)).Count();
+
+    /// Every field outside the entity's own lines that refers to entity n.
+    public static List<RefSite> References(Deck d, Entity e, int n)
+    {
+        Check(d, e, n, insert: false);
+        var own = Owned(d, e, n).SelectMany(g => g).ToHashSet();
+        int num = Number(d, e, n);
+        var sites = new List<RefSite>();
+        for (int li = 0; li < d.Lines.Count; li++)
+        {
+            var l = d.Lines[li];
+            if (own.Contains(l)) continue;
+            foreach (var i in Marked(l, Kinds(e)))
+                if (Ref(l, i, l.Tokens[i]) == num) sites.Add(new(li + 1, l.Label, CardSchema.Header(l.Card, i + CardSchema.Skip(l.Card, l.Count))));
+        }
+        return sites;
+    }
+
+    /// Fresh copies of entity n's lines (the grid's "add row, copy of selected"). The per-entity list
+    /// values start at 0, as ATB 3I's new D7 row does: F.1.A/F.3.A/F.4.A/F.7.A count contact rows the copy does not get.
+    public static EntityData Copy(Deck d, Entity e, int n)
+    {
+        Check(d, e, n, insert: false);
+        var data = new EntityData();
+        foreach (var g in Owned(d, e, n)) data.Groups.Add(g.Select(l => new DeckLine(l.Tokens, l.Label)).ToList());
+        foreach (var _ in Lists(e)) data.Values.Add("0");
+        return data;
+    }
+
+    const string Held = "#";   // a copied body's reference to one of its own segments, until Place resolves it
+    static readonly ConditionalWeakTable<Deck, List<DeckLine>> carried = new();
+
+    /// Copies (Copy) of segments first..first+count-1 and joints first..first+count-2, for Place. A reference to a
+    /// copied segment is held as that copy; every other reference stays a number. Each per-segment / per-joint family
+    /// (Groups) must have one row per entity or none: the rows are positional, so a gap would give the copy the wrong one.
+    public static (List<EntityData> Segs, List<EntityData> Joints) CopyBody(Deck d, int first, int count)
+    {
+        foreach (var e in new[] { Entity.Segment, Entity.Joint })
+            foreach (var g in Groups(e))
+                if (d.Rows(g).Count is var n && n != 0 && n != Count(d, e))
+                    throw new InvalidOperationException($"The deck has {n} {g[0]} rows for {Count(d, e)} {e.ToString().ToLowerInvariant()}s; a body copy needs one per {e.ToString().ToLowerInvariant()} or none.");
+        var segs = Enumerable.Range(first, count).Select(s => Copy(d, Entity.Segment, s)).ToList();
+        var joints = Enumerable.Range(first, count - 1).Select(j => Copy(d, Entity.Joint, j)).ToList();
+        foreach (var l in segs.Concat(joints).SelectMany(x => x.Groups).SelectMany(g => g))
+        {
+            var t = l.Tokens.ToList();
+            foreach (var i in Marked(l, Kinds(Entity.Segment)))
+                if (Num(t[i]) is int v && Ref(l, i, t[i]) is int a && a >= first && a < first + count) t[i] = (v < 0 ? "-" : "") + Held + Str(a - first);
+            l.SetTokens(t);
+        }
+        return (segs, joints);
+    }
+
+    /// Runs place, which puts CopyBody's copies into d through Insert / Delete (and GebodMerge's Swap), with the copies'
+    /// lines carried: every Insert and Delete shifts or clears their numeric references by its own rules, placed yet or
+    /// not. Then each held reference becomes the number of the copied segment it names, wherever that landed.
+    public static Deck Place(Deck d, List<EntityData> segs, List<EntityData> joints, Func<Deck> place)
+    {
+        var lines = segs.Concat(joints).SelectMany(x => x.Groups).SelectMany(g => g).ToList();
+        carried.AddOrUpdate(d, lines);
+        try { place(); } finally { carried.Remove(d); }
+        var number = d.Cards(Owner(Entity.Segment)).Select((l, i) => (l, i + 1)).ToDictionary(x => x.l, x => x.Item2);
+        foreach (var l in lines)
+        {
+            var t = l.Tokens.ToList();
+            for (int i = 0; i < t.Count; i++)
+                if (t[i].TrimStart('-') is var h && h.StartsWith(Held) && int.TryParse(h[Held.Length..], out int k))
+                    t[i] = Str((t[i][0] == '-' ? -1 : 1) * number[segs[k].Groups[0][0]]);
+            l.SetTokens(t);
+        }
+        return d;
+    }
+
+    /// d's lines, then the carried copies Place has not put in it yet.
+    static IEnumerable<DeckLine> Live(Deck d)
+    {
+        if (!carried.TryGetValue(d, out var c)) return d.Lines;
+        var inDeck = d.Lines.ToHashSet();
+        return d.Lines.Concat(c.Where(l => !inDeck.Contains(l)));
+    }
+
+    /// ATB 3I TableForm.cs:412-440: asked once when grid rows of segments (B2B6M) / joints (B3B4B5M) are inserted or deleted.
+    public const string SegmentCascadeText = "You have inserted/deleted segments and this requires CASCADE UPDATE/DELETE\r\nother input cards referring these segments.  Continue?";
+    public const string SegmentCascadeTitle = "Cascade Update of Segment ID Number";
+    public const string JointCascadeText = "You have inserted/deleted joints and this requires CASCADE UPDATE/DELETE\r\nother input cards referring these joints.  Continue?";
+    public const string JointCascadeTitle = "Cascade Update of Joint ID Number";
+
+    /// 3I's cascade warning before a segment/joint insert or delete: ask(text, title) with detail (the delete's
+    /// reference list) below 3I's text; false = No, leave the deck alone. Other entities are not asked here.
+    public static bool CascadeConfirmed(Entity e, string? detail, Func<string, string, bool> ask)
+    {
+        var (text, title) = e switch
+        {
+            Entity.Segment => (SegmentCascadeText, SegmentCascadeTitle),
+            Entity.Joint => (JointCascadeText, JointCascadeTitle),
+            _ => (null, null),
+        };
+        return text == null || ask(string.IsNullOrEmpty(detail) ? text : text + "\r\n\r\n" + detail, title!);
+    }
+
+    /// What Delete would pass its confirm: References plus the H.11 actuator warning.
+    public static List<RefSite> DeleteRefs(Deck d, Entity e, int n)
+    {
+        var refs = References(d, e, n);
+        if (H11Emptied(d, e == Entity.Actuator ? [n] : CascadedActuators(d, e, n)) is { } warn) refs.Add(warn);
+        return refs;
+    }
+
+    /// Delete entity n. When anything still refers to it, confirm gets the list first and a false
+    /// answer leaves the deck untouched (returns null). Returns what was removed, for Insert.
+    public static EntityData? Delete(Deck d, Entity e, int n, Func<IReadOnlyList<RefSite>, bool> confirm)
+    {
+        Check(d, e, n, insert: false);
+        if (e == Entity.Vehicle && n == Count(d, e))
+            throw new InvalidOperationException("The primary (last) vehicle cannot be deleted.");   // ATB 3I Vehicle.cs btnDelete
+        int num = Number(d, e, n);
+        var kinds = Kinds(e);
+        var cascade = Cascade(e);
+        var acts = CascadedActuators(d, e, n);
+        var refs = DeleteRefs(d, e, n);
+        if (refs.Count > 0 && !confirm(refs)) return null;
+
+        var data = new EntityData();
+        data.Groups.AddRange(Owned(d, e, n));
+        var gone = data.Groups.SelectMany(g => g).ToHashSet();
+        var lists = new Dictionary<string, List<string>>();
+        List<string>? List(string c) => lists.TryGetValue(c, out var v) ? v : ReadList(d, c) is { } r ? lists[c] = r : null;
+
+        for (int li = 0; li < d.Lines.Count; li++)
+        {
+            var l = d.Lines[li];
+            if (gone.Contains(l) || !cascade.TryGetValue(l.Card, out var cnt) || !Marked(l, kinds).Any(i => Ref(l, i, l.Tokens[i]) == num)) continue;
+            gone.Add(l);
+            if (cnt.Index >= 0) Bump(d, cnt.Card, cnt.Index, -1);
+            else if (List(cnt.Card) is { } v && Num(l.Tokens[0]) is int s && s >= 1 && s <= v.Count && Num(v[s - 1]) is int c)
+                v[s - 1] = Str(c - 1);
+        }
+        foreach (var c in Lists(e))
+            if (List(c) is { } v && n <= v.Count) { data.Values.Add(v[n - 1]); v.RemoveAt(n - 1); }
+            else data.Values.Add("0");
+
+        d.Lines.RemoveAll(gone.Contains);
+        foreach (var (c, v) in lists) WriteList(d, c, v);
+
+        var drop = new HashSet<DeckLine>();
+        if (e is Entity.Segment or Entity.Vehicle) DropH13Rows(d, num, drop);
+        Unref(d, kinds, num, drop);
+        foreach (var a in acts.OrderDescending()) Unref(d, [Kind.ActRef], a, drop);   // highest first: lower numbers stay valid
+        d.Lines.RemoveAll(drop.Contains);
+        if (e == Entity.Actuator) Bump(d, "D.1.B", 0, -1);
+        // H.11 is read only when NRTORQ > 0 (input_h11_cards.for:33): with no actuator left the line has to go.
+        if (acts.Count > 0 || e == Entity.Actuator)
+            if (d.Card("D.1.B") is { Count: > 0 } b && Num(b.Tokens[0]) == 0) d.Lines.RemoveAll(l => l.Is("H.11"));
+        BumpCount(d, e, -1);
+        return data;
+    }
+
+    /// F.10 positions (actuators) Delete(e, n) cascades; their H.11 entries go with them.
+    internal static List<int> CascadedActuators(Deck d, Entity e, int n)
+    {
+        if (!Cascade(e).ContainsKey("F.10")) return [];
+        int num = Number(d, e, n);
+        var kinds = Kinds(e);
+        return d.Cards("F.10").Select((l, i) => (l, i + 1)).Where(x => Marked(x.l, kinds).Any(i => Ref(x.l, i, x.l.Tokens[i]) == num)).Select(x => x.Item2).ToList();
+    }
+
+    /// Confirm-list entry when removing actuators lost leaves H.11 with no entry while actuators remain: Unref writes
+    /// Count 0 and the solver stops (input_h11_cards.for:36-41 STOP 741); Deck.Validate flags the result.
+    internal static RefSite? H11Emptied(Deck d, List<int> lost)
+    {
+        int li = d.Lines.FindIndex(l => l.Is("H.11"));
+        if (li < 0 || lost.Count == 0 || d.Card("D.1.B") is not { Count: > 0 } b || Num(b.Tokens[0]) is not int nr || nr - lost.Count < 1) return null;
+        var h = d.Lines[li];
+        var idx = Marked(h, [Kind.ActRef]).ToList();
+        return idx.Count > 0 && idx.All(i => Ref(h, i, h.Tokens[i]) is int a && lost.Contains(a))
+            ? new(li + 1, "H.11", "Count becomes 0 while actuators remain: the solver stops (STOP 741) until an actuator is added back")
+            : null;
+    }
+
+    /// Clear or drop every marked ref to num (count-led lists lose the entry, others get the card's blank) and shift refs > num down.
+    static void Unref(Deck d, Kind[] kinds, int num, HashSet<DeckLine> drop)
+    {
+        var live = Live(d).ToList();   // carried copies are B.2/B.6/G.3.A/B.3-B.5: never count-led or cascaded
+        for (int li = 0; li < live.Count; li++)
+        {
+            var l = live[li];
+            if (drop.Contains(l)) continue;
+            var idx = Marked(l, kinds).ToList();
+            if (idx.Count == 0) continue;
+            var t = l.Tokens.ToList();
+            var hit = new List<int>();
+            foreach (var i in idx)
+                if (Num(t[i]) is int v && Ref(l, i, t[i]) is int a) { if (a == num) hit.Add(i); else if (a > num) t[i] = Str(Math.Sign(v) * (a - 1)); }
+            if (hit.Count > 0 && CountLed.TryGetValue(l.Card, out int lead))
+            {
+                var spec = CardSchema.Cards[l.Card];
+                int first = spec.Names.Length - spec.Tail;
+                foreach (var g in hit.Select(i => first + (i - first) / spec.Tail * spec.Tail).Distinct().OrderDescending())
+                {
+                    t.RemoveRange(g, spec.Tail);
+                    t[lead] = Str(Num(t[lead])!.Value - 1);
+                }
+                if (l.Is("H.10.B") && Num(t[lead]) == 0)
+                {
+                    drop.Add(l);
+                    if (li + 1 < d.Lines.Count && d.Lines[li + 1].Is("H.10.C")) drop.Add(d.Lines[li + 1]);
+                    Bump(d, "H.10.A", 0, -1);
+                }
+            }
+            else foreach (var i in hit) t[i] = Blank(l.Card);
+            l.SetTokens(t);
+        }
+    }
+
+
+    /// Insert data as entity n (1..Count+1; a vehicle goes before vehicle n, never after the primary).
+    /// data's lines go into the deck as they are, so do not insert the same EntityData twice.
+    public static void Insert(Deck d, Entity e, int n, EntityData data)
+    {
+        Check(d, e, n, insert: true);
+        int num = Number(d, e, n);
+        var kinds = Kinds(e);
+        foreach (var l in Live(d))
+        {
+            var t = l.Tokens.ToList();
+            foreach (var i in Marked(l, kinds))
+                if (Num(t[i]) is int v && Ref(l, i, t[i]) is int a && a >= num) t[i] = Str(Math.Sign(v) * (a + 1));
+            l.SetTokens(t);
+        }
+        var groups = Groups(e);
+        for (int g = 0; g < groups.Length && g < data.Groups.Count; g++)
+            d.Lines.InsertRange(e == Entity.Vehicle ? d.Lines.IndexOf(Owned(d, e, n)[0][0]) : InsertAt(d, groups[g], n), data.Groups[g]);
+        var lists = Lists(e);
+        for (int c = 0; c < lists.Length && c < data.Values.Count; c++)
+            if (ReadList(d, lists[c]) is { } v) { v.Insert(n - 1, data.Values[c]); WriteList(d, lists[c], v); }
+            // ponytail: a list card absent from the deck (e.g. F.4.A with no joints) is not created — add when a deck needs it.
+        BumpCount(d, e, +1);
+
+        var own = data.Groups.SelectMany(g => g);
+        if (e == Entity.Plane && own.FirstOrDefault(l => l.Is("D.2.A")) is { Count: > 0 } p) SetToken(p, 0, n);
+        if (e == Entity.Vehicle && own.FirstOrDefault(l => l.Is("C.2.A")) is { Count: 14 } c2) SetToken(c2, 13, num);
+    }
+
+    /// Grid paste on an entity screen (the same path as Add): pasted row k becomes entity at+k, and the entity's
+    /// other groups are copies of entity template's. cards is the screen's group. Returns why rows were skipped.
+    /// A vehicle row replaces the matching C.1 / C.2.A / C.2.B lines of a copy of the template's block, so it must keep the
+    /// template's C.3/C.4/C.5 layout (Interpolated Points, Spline Data Type, Number of Data Points).
+    /// A B.3.A row is rejected when its Joint Type's spin class differs from the template's, as a vehicle row's layout is.
+    public static List<string> Paste(Deck d, Entity e, IReadOnlyList<string> cards, int at, int template, IEnumerable<IReadOnlyList<DeckLine>> rows)
+    {
+        Check(d, e, at, insert: true);
+        int gi = Array.FindIndex(Groups(e), g => g.SequenceEqual(cards, StringComparer.OrdinalIgnoreCase));
+        if (gi < 0 && e != Entity.Vehicle) throw new InvalidOperationException($"{string.Join(", ", cards)} is not a {e} group.");
+        var skipped = new List<string>();
+        var datas = new List<EntityData>();
+        int r = 0;
+        foreach (var row in rows)
+        {
+            r++;
+            var data = Copy(d, e, template);
+            if (e != Entity.Vehicle)
+            {
+                // The copy keeps the template's B.4.B/B.5.B/B.5.C presence, which follows the spin class (Labeler.cs:60,65).
+                if (e == Entity.Joint && gi == 0 && Spin(row.First(l => l.Is("B.3.A"))) != Spin(data.Groups[0][0]))
+                { skipped.Add($"row {r}: Joint Type needs different B.4/B.5 lines than joint {template}"); continue; }
+                // ParsePaste drops a blank B.4.B/B.5.B/B.5.C block (Deck.cs:181), so on those screens the row's own
+                // spin lines must be all present on a spin template, all absent otherwise (Labeler.cs:60,65) — a
+                // half-filled B.5 block is rejected. Each card appears at most once and the A line always does.
+                if (e == Entity.Joint && gi > 0 && row.Count != (Spin(data.Groups[0][0]) ? cards.Count : 1))
+                { skipped.Add($"row {r}: Joint Type needs different B.4/B.5 lines than joint {template}"); continue; }
+                data.Groups[gi] = row.ToList(); datas.Add(data); continue;
+            }
+            var block = data.Groups[0];
+            string? why = null;
+            foreach (var c in cards)
+            {
+                int bi = block.FindIndex(l => l.Is(c));
+                var p = row.FirstOrDefault(l => l.Is(c));
+                if ((bi < 0) != (p == null)) { why = $"{c} is in only one of the pasted row and vehicle {template}"; break; }
+                if (p == null) continue;
+                if (Layout(block[bi]) != Layout(p)) { why = $"{c} changes vehicle {template}'s C.3/C.4/C.5 layout"; break; }
+                block[bi] = p;
+            }
+            if (why == null) datas.Add(data); else skipped.Add($"row {r}: {why}");
+        }
+        for (int k = 0; k < datas.Count; k++) Insert(d, e, at + k, datas[k]);
+        return skipped;
+    }
+
+    static bool Spin(DeckLine b3a) => b3a.Count > 9 && Num(b3a.Tokens[2]) is int pin && Num(b3a.Tokens[9]) is int slip && Labeler.IsSpin(pin, slip);
+
+    static string Layout(DeckLine l) => l.Card switch
+    {
+        "C.2.A" => l.Count > 8 ? l.Tokens[8] : "",
+        "C.2.B" => l.Count > 2 ? l.Tokens[0] + " " + l.Tokens[2] : "",
+        _ => "",
+    };
+
+    // --- helpers ---
+
+    static void Check(Deck d, Entity e, int n, bool insert)
+    {
+        int max = Count(d, e) + (insert && e != Entity.Vehicle ? 1 : 0);
+        if (n < 1 || n > max) throw new ArgumentOutOfRangeException(nameof(n), $"{e} {n} is outside 1..{max}");
+    }
+
+    /// The number references use: a vehicle's segment number follows the body segments (src/input_vehicle.for NVEH).
+    static int Number(Deck d, Entity e, int n) => e == Entity.Vehicle ? d.SegmentCount + n : n;
+
+    internal static List<List<DeckLine>> Owned(Deck d, Entity e, int n)
+    {
+        if (e == Entity.Vehicle)
+        {
+            var starts = d.Lines.Select((l, i) => (l, i)).Where(x => x.l.Is("C.1")).Select(x => x.i).ToList();
+            int a = starts[n - 1], b = n < starts.Count ? starts[n] : d.Lines.FindIndex(a, l => l.Is("D.1.A"));
+            return [d.Lines.GetRange(a, (b < 0 ? d.Lines.Count : b) - a)];
+        }
+        return Groups(e).Select(g => d.Rows(g) is var rows && n <= rows.Count ? rows[n - 1].OfType<DeckLine>().ToList() : []).ToList();
+    }
+
+    static int InsertAt(Deck d, string[] group, int n)
+    {
+        var rows = d.Rows(group);
+        if (rows.Count == 0) return Place(d, group[0]);
+        return n <= rows.Count ? d.Lines.IndexOf(rows[n - 1][0]!) : d.Lines.IndexOf(rows[^1].Last(l => l != null)!) + 1;
+    }
+
+    // Card order of the deck grammar (Labeler.Walk / ATB 3I WriteFile). "F.9" covers every F.9.x card.
+    static readonly string[] Order =
+    [
+        "A.1.A", "A.1.B", "A.1.C", "A.3", "A.4", "A.5", "B.1", "B.2.A", "B.2.B", "B.3.A", "B.3.B", "B.3.C", "B.4.A", "B.4.B",
+        "B.5.A", "B.5.B", "B.5.C", "B.6", "C.1", "C.2.A", "C.2.B", "C.3", "C.4", "C.5", "D.1.A", "D.1.B", "D.2.A", "D.2.B", "D.2.C",
+        "D.2.D", "D.5", "D.6", "D.7", "D.8", "D.9", "E.1", "E.2", "E.3", "E.4.A", "E.6.A", "E.6.B", "E.6.C", "E.7.A", "E.7.B", "E.7.C",
+        "F.1.A", "F.1.B", "F.2.A", "F.2.B", "F.3.A", "F.3.B", "F.4.A", "F.4.B", "F.6", "F.7.A", "F.7.B", "F.7.C", "F.8.A", "F.8.B",
+        "F.8.C", "F.8.D1", "F.8.D2", "F.9", "F.10", "G.1", "G.2", "G.3.A", "H.1.A", "H.1.B", "H.2.A", "H.2.B", "H.3.A", "H.3.B",
+        "H.4", "H.5", "H.6", "H.7", "H.8", "H.9", "H.10.A", "H.10.B", "H.10.C", "H.11", "H.12.A", "H.12.B",
+    ];
+
+    internal static int Rank(string card)
+    {
+        int i = Array.IndexOf(Order, card.ToUpperInvariant());
+        return i >= 0 ? i : card.StartsWith("F.9.", StringComparison.OrdinalIgnoreCase) ? Array.IndexOf(Order, "F.9") : -1;
+    }
+
+    /// Line index where a card with no line in the deck yet goes: before the first labelled line that comes later
+    /// in the grammar. Placement only; nothing is renumbered. Unlabelled data rows stay with the card above them.
+    internal static int Place(Deck d, string card)
+    {
+        int r = Rank(card);
+        if (r < 0) throw new InvalidOperationException($"No place in the deck grammar for {card}.");
+        int i = d.Lines.FindIndex(l => Rank(l.Card) > r);
+        return i < 0 ? d.Lines.Count : i;
+    }
+
+    /// Token indexes of l whose schema kind is one of kinds.
+    static IEnumerable<int> Marked(DeckLine l, Kind[] kinds)
+    {
+        if (l.Card.Length == 0) yield break;
+        int skip = CardSchema.Skip(l.Card, l.Count);
+        for (int i = 0; i < l.Count; i++)
+            if (CardSchema.KindOf(l.Card, i + skip) is { } k && kinds.Contains(k)) yield return i;
+    }
+
+    static int? Num(string tok) =>
+        double.TryParse(tok.Replace('D', 'E').Replace('d', 'e'), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) && v == Math.Floor(v) && Math.Abs(v) < int.MaxValue
+            ? (int)v : null;
+
+    // The solver reads these "Segment"/"Joint" fields as SEG(ABS(MSG)) / JNT(ABS(MSG)); the sign picks an output option
+    // (src/heding_hcards.for:103, output_hcards.for:72, heding_ang_displ.for:82, heding_wind.for:72, heding_jnt_parm.for:72).
+    // Ref Segment (KREF) gets no ABS and must be >= 0 (input_h4_h9_cards.for:113); H.9's joint has no ABS (heding_joint_forces.for:51).
+    static readonly HashSet<string> SignedCards = new(StringComparer.OrdinalIgnoreCase)
+    { "H.1.A", "H.1.B", "H.2.A", "H.2.B", "H.3.A", "H.3.B", "H.4", "H.5", "H.6", "H.7", "H.8", "H.11" };   // H.11: heding_actuators.for:70-71 SEG(ABS(KK))
+
+    /// The entity number token i refers to: |value| in a sign-carrying H field, else the value.
+    static int? Ref(DeckLine l, int i, string tok) =>
+        Num(tok) is int v && SignedCards.Contains(l.Card) && !CardSchema.Header(l.Card, i + CardSchema.Skip(l.Card, l.Count)).StartsWith("Ref ")
+            ? Math.Abs(v) : Num(tok);
+
+    /// H.1-H.3: drop every selection row whose Segment (|MSG|) or Ref Segment is num, as CountLed does for H.4-H.9, so no
+    /// row is left pointing at SEG(0) or silently at the vehicle frame (heding_hcards.for:103-105). Layout per
+    /// src/input_h1_h3_cards.for: the .a line is Count + row 1; Count <= 1 is followed by one dummy .b line, else one .b per further row.
+    /// The .b lines are the ones right after the .a line (a deck's labels can be off: 2479_2.LIN's H.3.a says H.1.a).
+    static void DropH13Rows(Deck d, int num, HashSet<DeckLine> drop)
+    {
+        static bool IsB(DeckLine l) => l.Card is "H.1.B" or "H.2.B" or "H.3.B";
+        for (int li = 0; li < d.Lines.Count; li++)
+        {
+            var a = d.Lines[li];
+            // ponytail: a 6-token .a line (no Count) is not reflowed and falls back to clearing the ref — no deck has one.
+            if (a.Card is not ("H.1.A" or "H.2.A" or "H.3.A") || a.Count != 7) continue;
+            var bs = new List<DeckLine>();
+            for (int k = li + 1; k < d.Lines.Count && IsB(d.Lines[k]); k++) bs.Add(d.Lines[k]);
+            var rows = new List<List<string>> { a.Tokens.GetRange(1, 6) };
+            rows.AddRange(bs.Where(b => b.Count == 6).Select(b => b.Tokens.ToList()));
+            var keep = rows.Where(r => Num(r[0]) != num && (Num(r[1]) is not int s || Math.Abs(s) != num)).ToList();
+            if (keep.Count == rows.Count) continue;
+            a.SetTokens([Str(keep.Count), .. keep.Count > 0 ? keep[0] : Enumerable.Repeat("0", 6)]);
+            List<List<string>> bLines = keep.Count <= 1 ? [["0"]] : keep.Skip(1).ToList();
+            for (int k = 0; k < bs.Count; k++)
+                if (k < bLines.Count) bs[k].SetTokens(bLines[k]); else drop.Add(bs[k]);
+        }
+    }
+
+    static string Str(int v) => v.ToString(CultureInfo.InvariantCulture);
+
+    static void SetToken(DeckLine l, int i, int v) { var t = l.Tokens.ToList(); t[i] = Str(v); l.SetTokens(t); }
+
+    static void Bump(Deck d, string card, int i, int delta)
+    {
+        if (d.Card(card) is { } l && i < l.Count && Num(l.Tokens[i]) is int v) SetToken(l, i, v + delta);
+    }
+
+    static void BumpCount(Deck d, Entity e, int delta)
+    {
+        if (e == Entity.Segment) Bump(d, "B.1", 0, delta);
+        else if (e == Entity.Joint) Bump(d, "B.1", 1, delta);
+        else if (e == Entity.Plane) Bump(d, "D.1.A", 0, delta);
+        else if (e == Entity.Actuator && delta > 0) Bump(d, "D.1.B", 0, delta);   // Delete bumps it itself, before the H.11 check
+    }
+
+    static List<string>? ReadList(Deck d, string card)
+    {
+        var ls = d.Cards(card).ToList();
+        return ls.Count == 0 ? null : ls.SelectMany(l => l.Tokens).ToList();
+    }
+
+    /// Repack a list card 18 values per line, touching only the lines whose values change.
+    static void WriteList(Deck d, string card, List<string> vals)
+    {
+        var ls = d.Cards(card).ToList();
+        var chunks = vals.Chunk(18).ToList();
+        int at = d.Lines.IndexOf(ls[^1]) + 1;
+        for (int i = 0; i < Math.Max(ls.Count, chunks.Count); i++)
+            if (i >= chunks.Count) d.Lines.Remove(ls[i]);
+            else if (i < ls.Count) ls[i].SetTokens(chunks[i]);
+            else d.Lines.Insert(at++, new DeckLine(chunks[i], ls[0].Label));
+    }
+}
