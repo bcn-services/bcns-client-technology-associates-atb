@@ -31,6 +31,13 @@ Renumber follows ATB 3I `ATB3I.Util/ATBUpdate.cs` except where 3I leaves a refer
 - **Reference Segment / Vehicle Segment lists**: 3I drops vehicles fixed to a rotating body segment (B2B6M "Define Rotation") from Reference Segment and lists `ATB.RefSegment()` body segments in Vehicle Segment; ours lists every other vehicle, and the vehicle's own and current segment.
 - **Sub-editors write as you leave a box**: 3I's OK writes every field to the database; ours writes the one deck token when a box or cell is left (3I's number check first), on a working copy that OK keeps and Cancel drops — so only edited lines are rewritten. The forms are modal dialogs, not MDI children.
 - **VehOpt2's plot Y axis reads "VehicleID"**: copied — 3I captions it with grid column 0 (`VehOpt2.cs:1667`, `index` never set). The Data Plot is drawn with GDI, not 3I's chart control; layout, legend, colours and buttons follow Plots.cs.
+- **Function list stays open under its editor**: 3I's GenList closes itself when it opens FDFData (MDI, `GenList.cs` btnEdit); ours opens FDFData / JntFData / the wind table as modal dialogs over the list, on a working copy that OK keeps and Cancel drops.
+- **F1 Type to Constant zeroes D2 too, and F2 Type is refused while F1 is Constant**: follows 3I's own message ("reset D1 and D2 to zeros", `ATBGrid.cs` F1 type rule); a constant F1 keeps its value in D2, so an F2 there would have no D2 to live in.
+- **Tabular FDF plot endpoints are interpolated**: 3I's Plot draws only the X/Y pairs (`FDFData.cs` btnPlot); ours adds the curve at D0/|D1| (or |D1|/|D2|) by the solver's `evalfd_table` rule, so the drawn range is the function's range.
+- **Joint plot in the solver's units**: polynomial theta uses RADIAN = pi/180 and torque is clamped at >= 0 as FNTERP does; 3I's JntFData plots raw coefficients.
+- **FunctionID uniqueness checks E.1 only**: as 3I's `ATB.UsedFunctionID` (`ATBGrid.cs:2237`, `:2536`, `:2741`), a joint or wind ID may repeat an FDF ID.
+- **A new wind function adds F.7.A**: raising D.1.A NWINDF from 0 writes one F.7.A of zeros (one per segment) so the deck still reads; deleting the last wind function removes it. 3I leaves F.7 to its Wind screen.
+- **Paste into a deck with no E.7 section adds nothing**: 3I pastes into its empty E7ac table; ours needs an existing joint function to place the block after (use Insert first).
 
 ## Body structure
 - **Body boundaries are NULL joints**: a body starts at segment 1 and at J+1 for each joint J with Seg JNT 0 (`src/Chain.for:38-43`); NJNT = NSEG-1 with no flexible bodies; G.2 has one row per reference segment (`src/input_linear.for:66-70`). Used by GebodMerge.BodyStarts.

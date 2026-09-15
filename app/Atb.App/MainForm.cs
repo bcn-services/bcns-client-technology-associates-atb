@@ -57,6 +57,12 @@ public sealed class MainForm : Form
         model.DropDownItems.Add(body);
         // ATB 3I MainMenu.cs:2691-2707: Model > Vehicle Motion..., after Body...
         model.DropDownItems.Add("Vehicle Motion...", null, (_, _) => VehicleMotion());
+        // ATB 3I MainMenu.cs:2712-2721: Model > Function > General FDF... / Joint Stiffness... / Wind Force...
+        var function = new ToolStripMenuItem("Function");
+        function.DropDownItems.Add("General FDF...", null, (_, _) => FunctionList(Functions.Kind.Fdf));
+        function.DropDownItems.Add("Joint Stiffness...", null, (_, _) => FunctionList(Functions.Kind.Joint));
+        function.DropDownItems.Add("Wind Force...", null, (_, _) => FunctionList(Functions.Kind.Wind));
+        model.DropDownItems.Add(function);
         menu.Items.AddRange([file, edit, view, model, tools]);
         MainMenuStrip = menu;
 
@@ -551,6 +557,14 @@ public sealed class MainForm : Form
     {
         if (running || deck == null) return;
         using var f = new VehicleListForm(deck);
+        f.ShowDialog(this);
+        if (f.Changed) { deck = f.Deck; dirty = true; ShowDeck(); }
+    }
+
+    void FunctionList(Functions.Kind kind)
+    {
+        if (running || deck == null) return;
+        using var f = new FunctionListForm(deck, kind);
         f.ShowDialog(this);
         if (f.Changed) { deck = f.Deck; dirty = true; ShowDeck(); }
     }

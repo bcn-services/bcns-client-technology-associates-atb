@@ -268,7 +268,7 @@ public static class Labeler
     }
 
     /// ATB 3I FileManager.GetFunctionType: E.2 D1/D2 -> function slot types (1 = E.3 polynomial, 2 = E.4 table).
-    static int[] FunctionType(double d1, double d2) =>
+    public static int[] FunctionType(double d1, double d2) =>
         d1 == 0 ? [0, 0]
         : d2 == 0 ? [d1 < 0 ? 2 : 1, 0]
         : d2 > 0 ? [d1 < 0 ? 2 : 1, 1]

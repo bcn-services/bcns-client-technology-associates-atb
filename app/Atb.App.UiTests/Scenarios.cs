@@ -449,6 +449,71 @@ public class Scenarios
         Assert.Contains(nv, after[want]);
     }
 
+    /// FDF on client deck 2479_2 (function 4 polynomial F1, row 3; function 7 tabular F1, row 6). No client deck has an
+    /// E.6 or E.7 function, so wind and joint use the synthetic 2479_2 variants (fixtures/functions).
+    public static IEnumerable<object[]> FunctionDecks() =>
+    [
+        ["cases/2479/2479_2.LIN", "General FDF...", 3, "Polynomial FDF Data Definition", "Coef Row 1", "Plot"],
+        ["cases/2479/2479_2.LIN", "General FDF...", 6, "Tabular FDF Data Definition", "Y Row 1", "Plot"],
+        ["app/Atb.Core.Tests/fixtures/functions/2479_2_joint.LIN", "Joint Stiffness...", 0, "Joint Stiffness Function Data", "Theta 0 Row 1", "Plot Current Row"],
+        ["app/Atb.Core.Tests/fixtures/functions/2479_2_joint.LIN", "Joint Stiffness...", 1, "Joint Stiffness Function Data", "C1 Row 0", "Plot Current Row"],
+        ["app/Atb.Core.Tests/fixtures/functions/2479_2_wind.LIN", "Wind Force...", 0, "Wind Force Time History Data (Function No.1)", "Fx Row 1", ""],
+    ];
+
+    /// Model > Function > item: the 3I list, Edit (Time Hist for wind) on one row, one value typed, the plot (3I's
+    /// wind table has none), OK, Save & Exit, Ctrl+S. Exactly one deck line changes, and it holds the typed value.
+    [Theory, MemberData(nameof(FunctionDecks))]
+    public void FunctionEditors(string rel, string item, int row, string editor, string cellName, string plot)
+    {
+        var b = Path.GetFileNameWithoutExtension(rel) + "-" + row + "-" + item[..4];
+        var copy = Robot.TempCopy(rel, Path.Combine("function", b));
+        var before = File.ReadAllLines(copy);
+        string listTitle = item switch
+        {
+            "General FDF..." => "Force Deflection Function Definition",
+            "Joint Stiffness..." => "Joint Stiffness Function Definition",
+            _ => "Wind Force Function Definition",
+        };
+        const string nv = "7.25";
+
+        using var r = new Robot("function-" + b, copy);
+        r.Menu("Model", "Function");
+        var cond = r.A.ConditionFactory.ByControlType(ControlType.MenuItem).And(r.A.ConditionFactory.ByName(item));
+        r.Click(Robot.Until(() => r.A.GetDesktop().FindAllChildren(r.A.ConditionFactory.ByProcessId(r.App.ProcessId))
+            .Select(w => w.FindFirstDescendant(cond)).FirstOrDefault(e => e != null), 10, "menu item " + item));
+        var list = BodyWin(r, listTitle);
+        r.Shot("function-list");
+        r.Click(BodyCell(r, list, $"Title Row {row}"));
+        r.Click(r.Button(list, item == "Wind Force..." ? "Time Hist" : "Edit"));
+        var ed = BodyWin(r, editor);
+        r.Shot("editor");
+        r.Click(BodyCell(r, ed, cellName));
+        FlaUI.Core.Input.Keyboard.Type(nv);
+        Robot.Press(VirtualKeyShort.RETURN);
+        Robot.UntilTrue(() => Robot.Value(BodyCell(r, ed, cellName)) == nv, 10, cellName + " = " + nv);
+        r.Shot("edited");
+        if (plot != "")
+        {
+            r.Click(BodyCell(r, ed, cellName));   // JntFData plots the current row
+            r.Click(r.Button(ed, plot));
+            BodyWin(r, "Data Plot");
+            r.Shot("data-plot");
+        }
+        r.Click(r.Button(ed, "OK"));
+        Robot.UntilTrue(() => FindWin(r, editor) == null && FindWin(r, "Data Plot") == null, 10, "editor and plot closed");
+        r.Shot("list-after");
+        r.Click(r.Button(list, "Save & Exit"));
+        Robot.UntilTrue(() => FindWin(r, listTitle) == null, 10, listTitle + " closed");
+        Assert.Empty(r.Unexpected());
+        r.SaveDeck(copy);
+
+        var after = File.ReadAllLines(copy);
+        Assert.Equal(before.Length, after.Length);
+        var changed = Enumerable.Range(0, before.Length).Where(i => before[i] != after[i]).ToList();
+        Assert.Single(changed);
+        Assert.Contains(nv, after[changed[0]]);
+    }
+
     const string Anim = "ATB animation";
 
     /// View > Animation: open, play, step, frames at 0/50/100%; no window other than main + viewer at any check.
