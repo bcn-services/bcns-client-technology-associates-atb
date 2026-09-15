@@ -17,9 +17,14 @@ public sealed class VehicleListForm : Form
     // 3I layout (Vehicle.cs InitializeComponent): grid (0,8) 592x312, buttons 112x24 on rows y 320 / 360, client 592x389.
     readonly DataGridView grid = new()
     {
-        Location = new Point(0, 8), Size = new Size(592, 312), ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows = false,
+        Location = new Point(0, 8), Size = new Size(592, 312), AllowUserToAddRows = false, AllowUserToDeleteRows = false,
         SelectionMode = DataGridViewSelectionMode.FullRowSelect, RowHeadersVisible = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+        EditMode = DataGridViewEditMode.EditOnKeystrokeOrF2,
     };
+    readonly Button delete;
+    bool loading;
+    /// Copy Vehicle's clipboard (3I keeps the copied C1C2a-C5 rows in its database for Replace).
+    List<DeckLine>? copied;
 
     public VehicleListForm(Deck deck)
     {
@@ -27,36 +32,95 @@ public sealed class VehicleListForm : Form
         Text = "Vehicle Motion"; ClientSize = new Size(592, 389); FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = MinimizeBox = false; StartPosition = FormStartPosition.CenterParent;
         foreach (var h in new[] { "VehicleID", "Vehicle SegID", "Vehicle Title", "Vehicle Type" })
-            grid.Columns[grid.Columns.Add(h, h)].SortMode = DataGridViewColumnSortMode.NotSortable;
+        {
+            var c = grid.Columns[grid.Columns.Add(h, h)];
+            c.SortMode = DataGridViewColumnSortMode.NotSortable; c.ReadOnly = h != "Vehicle Title";
+        }
+        grid.CellValueChanged += (_, e) => { if (!loading && e.RowIndex >= 0 && e.ColumnIndex == 2) BeginInvoke(() => SetTitle(e.RowIndex)); };
         Controls.Add(grid);
-        // ponytail: Insert / Copy / Delete / Replace Vehicle are shown but disabled (STANDARDS.md divergence) — build them
-        // when a client asks to add or remove a vehicle; they cascade C.1-C.5 and every segment reference.
-        Btn(72, 320, "Insert Vehicle", null); Btn(240, 320, "Copy Vehicle", null); Btn(408, 320, "Edit Vehicle", EditVehicle);
-        Btn(72, 360, "Delete Vehicle", null); Btn(240, 360, "Replace Vehicle", null); Btn(408, 360, "Save && Exit", Close);
+        Btn(72, 320, "Insert Vehicle", InsertVehicle); Btn(240, 320, "Copy Vehicle", CopyVehicle); Btn(408, 320, "Edit Vehicle", EditVehicle);
+        delete = Btn(72, 360, "Delete Vehicle", DeleteVehicle); Btn(240, 360, "Replace Vehicle", ReplaceVehicle); Btn(408, 360, "Save && Exit", Close);
         Fill();
         Shown += (_, _) => grid.ClearSelection();   // 3I opens with no row selected (grdEx.GridClearSelectRow)
     }
 
-    void Btn(int x, int y, string text, Action? act)
+    Button Btn(int x, int y, string text, Action act)
     {
-        var b = new Button { Text = text, Location = new Point(x, y), Size = new Size(112, 24), Enabled = act != null };
-        if (act != null) b.Click += (_, _) => act();
+        var b = new Button { Text = text, Location = new Point(x, y), Size = new Size(112, 24) };
+        b.Click += (_, _) => act();
         Controls.Add(b);
+        return b;
     }
 
     void Fill()
     {
+        loading = true;
         grid.Rows.Clear();
-        foreach (var v in Vehicles.Blocks(Deck))
+        var vs = Vehicles.Blocks(Deck);
+        foreach (var v in vs)
             grid.Rows.Add(v.Id, Vehicles.SegId(Deck, v), v.Title, v.Type < Vehicles.TypeNames.Length ? Vehicles.TypeNames[v.Type] : "");
+        delete.Enabled = vs.Count > 1;   // only the primary vehicle: nothing 3I lets you delete
+        loading = false;
+    }
+
+    /// One edit on a copy of the deck; the list keeps it (3I writes each operation to its database at once).
+    void Apply(Action<Deck> op, int select)
+    {
+        var d = Deck.Parse(Deck.Write());
+        op(d);
+        if (d.Write() != Deck.Write()) { Deck = d; Changed = true; }
+        Fill();
+        grid.ClearSelection();
+        if (select >= 0 && select < grid.Rows.Count) grid.Rows[select].Selected = true;
+    }
+
+    /// Vehicle_Closing: the Vehicle Title cell is C.1 token 0, one line rewritten.
+    void SetTitle(int row) => Apply(d => Vehicles.SetTitle(d, Vehicles.Blocks(d)[row], grid[2, row].Value?.ToString() ?? ""), row);
+
+    int? One(string op)
+    {
+        if (grid.SelectedRows.Count == 0) { Warn(NoRow, op); return null; }
+        if (grid.SelectedRows.Count > 1) { Warn(OneRow, op); return null; }
+        return grid.SelectedRows[0].Index;
+    }
+
+    bool Ask(string text, string title) => MessageBox.Show(this, text, title, MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
+
+    /// btnInsert (Vehicle.cs:557-631): confirm, then Renumber inserts before the selected vehicle.
+    void InsertVehicle()
+    {
+        if (One("Insert Vehicle Operation Warning") is not { } row || !Ask(Vehicles.InsertText, Vehicles.InsertTitle)) return;
+        Apply(d => Vehicles.Insert(d, row + 1), row);
+    }
+
+    /// btnCopy: the selected vehicle's lines, for Replace Vehicle.
+    void CopyVehicle()
+    {
+        if (One("Copy Vehicle Operation Warning") is { } row) copied = Vehicles.Copy(Deck, row + 1);
+    }
+
+    /// btnDelete (Vehicle.cs:374-479): the primary vehicle is refused; otherwise confirm, then Renumber deletes.
+    void DeleteVehicle()
+    {
+        if (One("Delete Vehicle Operation Warning") is not { } row) return;
+        if (row + 1 == Vehicles.Blocks(Deck).Count) { Warn(Vehicles.PrimaryText, "Delete Vehicle Operation Warning"); return; }
+        if (!Ask(Vehicles.DeleteText, Vehicles.DeleteTitle)) return;
+        Apply(d => Vehicles.Delete(d, row + 1), row);
+    }
+
+    /// btnReplace (Vehicle.cs:633-748): the selected vehicle becomes the copied one.
+    void ReplaceVehicle()
+    {
+        if (One("Replace Vehicle Operation Warning") is not { } row) return;
+        if (copied == null) { Warn("Clipboard doesn't contain any data.", "Replace Vehicle Operation Warning"); return; }
+        if (!Ask(Vehicles.ReplaceText, Vehicles.ReplaceTitle)) return;
+        Apply(d => Vehicles.Replace(d, row + 1, copied), row);
     }
 
     /// Vehicle.cs:481-550: one selected row opens the sub-editor for its VehicleType.
     void EditVehicle()
     {
-        if (grid.SelectedRows.Count == 0) { Warn(NoRow); return; }
-        if (grid.SelectedRows.Count > 1) { Warn(OneRow); return; }
-        int row = grid.SelectedRows[0].Index;
+        if (One("Edit Vehicle Operation Warning") is not { } row) return;
         var v = Vehicles.Blocks(Deck)[row];
         using VehEditor f = Vehicles.Editor(v.Type) switch
         {
@@ -70,7 +134,7 @@ public sealed class VehicleListForm : Form
         grid.Rows[row].Selected = true;
     }
 
-    void Warn(string text) => MessageBox.Show(this, text, "Edit Vehicle Operation Warning", MessageBoxButtons.OK, MessageBoxIcon.Exclamation);
+    void Warn(string text, string title) => MessageBox.Show(this, text, title, MessageBoxButtons.OK, MessageBoxIcon.Exclamation);
 }
 
 /// What VehOpt1 / VehOpt2 / VehOpt34 share: a working copy of the deck (OK keeps it, Cancel drops it), Label11, the three
@@ -78,7 +142,9 @@ public sealed class VehicleListForm : Form
 public abstract class VehEditor : Form
 {
     public Deck Deck { get; }
-    protected readonly Vehicles.Block B;
+    readonly int id;
+    /// Re-read after every row add / delete (C.3 lines are rewritten then).
+    protected Vehicles.Block B => Vehicles.Blocks(Deck)[id - 1];
     bool loading; string entered = "";
     protected DataGridView? Grid;
     DataPlotForm? plot;
@@ -86,7 +152,7 @@ public abstract class VehEditor : Form
     protected VehEditor(Deck src, int id, Size client)
     {
         Deck = Deck.Parse(src.Write());
-        B = Vehicles.Blocks(Deck)[id - 1];
+        this.id = id;
         Text = Vehicles.Title(B.Type); ClientSize = client; FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = MinimizeBox = false; StartPosition = FormStartPosition.CenterParent;
         Controls.Add(new Label { Text = "Vehicle Segment ID: " + B.Id, Location = new Point(8, 8), AutoSize = true });   // Label11
@@ -175,12 +241,23 @@ public abstract class VehEditor : Form
     {
         Grid = new DataGridView
         {
-            Dock = DockStyle.Fill, AllowUserToAddRows = false, AllowUserToDeleteRows = false, RowHeadersVisible = false,
+            Dock = DockStyle.Fill, AllowUserToAddRows = true, AllowUserToDeleteRows = false, RowHeadersVisible = false,
             SelectionMode = DataGridViewSelectionMode.CellSelect, MultiSelect = false, EditMode = DataGridViewEditMode.EditOnKeystrokeOrF2,
         };
         foreach (var h in Vehicles.Columns(B.Type)) Grid.Columns[Grid.Columns.Add(h, h)].SortMode = DataGridViewColumnSortMode.NotSortable;
         if (Vehicles.TimeComputed(B.Type)) { Grid.Columns[0].ReadOnly = true; Grid.Columns[0].DefaultCellStyle.BackColor = Color.Cyan; }
-        // ponytail: rows cannot be added or deleted (Interpolated Points / Number of Data Points stay as read) — add with C.2 upkeep.
+        // AllowAddNew / AllowDelete: the new row becomes a zero deck row at once and Delete removes the current row, each
+        // rewriting Interpolated Points (C.2.A token 8) / Number of Data Points (C.2.B token 2) from the row count.
+        Grid.UserAddedRow += (_, _) => { if (!loading) Vehicles.AddRow(Deck, B); };
+        Grid.KeyDown += (_, e) =>
+        {
+            if (e.KeyCode != Keys.Delete || Grid.IsCurrentCellInEditMode || Grid.CurrentCell is not { } c || c.RowIndex >= Vehicles.RowCount(B)) return;
+            e.Handled = true;
+            int r = c.RowIndex, col = c.ColumnIndex;
+            Vehicles.DeleteRow(Deck, B, r);
+            FillGrid();
+            if (Grid.Rows.Count > 0) Grid.CurrentCell = Grid[col, Math.Min(r, Grid.Rows.Count - 1)];
+        };
         Grid.CellValueChanged += (_, e) =>
         {
             if (loading || e.RowIndex < 0) return;
@@ -323,6 +400,7 @@ public sealed class VehOpt34Form : VehEditor
     void Box(Control g, string title, int x, int y, DeckLine line, int tok, params string[] labels)
     {
         var box = Group(g, title, x, y, 296, 64);
-        for (int k = 0; k < labels.Length; k++) Field(box, labels[k], 8 + k * 96, 28, 36, line, tok + k).Width = 52;
+        int w = labels.Length == 1 ? 48 : 36;   // "Speed" in full (3I's Label is AutoSize)
+        for (int k = 0; k < labels.Length; k++) Field(box, labels[k], 8 + k * 96, 28, w, line, tok + k).Width = 52;
     }
 }

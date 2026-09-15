@@ -44,9 +44,17 @@ public sealed class FunctionListForm : Form
             K.Joint => ["FunctionID", "Title", "NTheta", "NPhi", "Type"],
             _ => ["FunctionID", "Title", "Specific Heats", "Sound Speed", "Absolute Pressure", "Velocity SegID", "Reference SegID"],
         };
+        // ATBGrid E6ab: Velocity / Reference SegID are dropdowns of the deck's segments (0 = none, then bodies and vehicles).
+        string[] segs = [.. Enumerable.Range(0, Deck.SegmentCount + 1).Select(i => i.ToString())
+            .Union(Vehicles.Blocks(Deck).Select(v => Vehicles.SegId(Deck, v).ToString()))
+            .Union(Functions.Winds(Deck).SelectMany(w => new[] { Tok(w.B, 3), Tok(w.B, 4) }).Where(t => t.Length > 0))];
         foreach (var h in cols)
         {
-            string[]? items = h switch { "F1 Type" => Functions.F1Types, "F2 Type" => Functions.F2Types, "Type" => ["Tabular", "Polynomial"], _ => null };
+            string[]? items = h switch
+            {
+                "F1 Type" => Functions.F1Types, "F2 Type" => Functions.F2Types, "Type" => ["Tabular", "Polynomial"],
+                "Velocity SegID" or "Reference SegID" => segs, _ => null,
+            };
             DataGridViewColumn c = items == null ? new DataGridViewTextBoxColumn() : new DataGridViewComboBoxColumn { DisplayStyle = DataGridViewComboBoxDisplayStyle.ComboBox, FlatStyle = FlatStyle.Flat };
             if (c is DataGridViewComboBoxColumn cb) cb.Items.AddRange(items!);
             c.Name = c.HeaderText = h; c.SortMode = DataGridViewColumnSortMode.NotSortable; c.Width = h == "Title" ? 170 : 75;
@@ -61,7 +69,20 @@ public sealed class FunctionListForm : Form
         if (kind == K.Fdf)
         {
             Controls.Add(new Label { Text = "Editing Function", Location = new Point(128, 349), AutoSize = true, ForeColor = Color.Green });
-            which = new ListBox { Location = new Point(128, 365), Size = new Size(96, 32), AccessibleName = "Editing Function" };
+            // GenList lstFunctions: Arial 8.25 bold Navy, ItemHeight 14 — both F1 and F2 in view.
+            which = new ListBox
+            {
+                Location = new Point(128, 365), Size = new Size(96, 32), AccessibleName = "Editing Function", IntegralHeight = false,
+                Font = new Font("Arial", 8.25f, FontStyle.Bold), ForeColor = Color.Navy, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = 14,
+            };
+            which.DrawItem += (_, e) =>
+            {
+                if (e.Index < 0) return;
+                e.DrawBackground();
+                TextRenderer.DrawText(e.Graphics, which.Items[e.Index].ToString(), e.Font, e.Bounds,
+                    (e.State & DrawItemState.Selected) != 0 ? SystemColors.HighlightText : Color.Navy, TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+                e.DrawFocusRectangle();
+            };
             which.Items.AddRange(["Function F1", "Function F2"]);
             which.SelectedIndex = 0;
             Controls.Add(which);
@@ -107,6 +128,8 @@ public sealed class FunctionListForm : Form
 
     void Warn(string text, string title) => MessageBox.Show(this, text, title, MessageBoxButtons.OK, MessageBoxIcon.Exclamation);
     bool Ask(string text, string title) => MessageBox.Show(this, text, title, MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
+    /// ATBGrid.cs:2523-2528 / :2728-2733: a non-numeric FunctionID / NTheta / NPhi / Type / Specific Heats.
+    void FormatError() => MessageBox.Show(this, Functions.FormatError, Functions.FormatErrorTitle, MessageBoxButtons.OK, MessageBoxIcon.Error);
 
     List<int> Selected() => grid.SelectedRows.Cast<DataGridViewRow>().Select(r => r.Index)
         .Concat(grid.SelectedRows.Count == 0 && grid.SelectedCells.Count > 0 ? grid.SelectedCells.Cast<DataGridViewCell>().Select(c => c.RowIndex) : [])
@@ -128,8 +151,8 @@ public sealed class FunctionListForm : Form
         if (name == "FunctionID")
         {
             var err = Functions.SetId(Deck, head, text);
-            if (err != null) MessageBox.Show(this, err, err.StartsWith("Input") ? "ATB 3I" : "Change Function ID", MessageBoxButtons.OK,
-                err.StartsWith("Input") ? MessageBoxIcon.Error : MessageBoxIcon.Exclamation);
+            if (err == Functions.FormatError) FormatError();
+            else if (err != null) Warn(err, "Change Function ID");
         }
         else if (name == "Title") Deck.Edit(head, 1, text);
         else if (kind == K.Fdf) FdfCell(Functions.Fdfs(Deck)[row], name, text);
@@ -186,7 +209,7 @@ public sealed class FunctionListForm : Form
     {
         int nt = j.NTheta, np = j.NPhi, type = j.Type;
         if (name == "Type") type = text == "Polynomial" ? -1 : 1;
-        else if (!int.TryParse(text.Trim(), out var v)) { Warn("Input must be a number!", "Input Warning"); return; }
+        else if (!int.TryParse(text.Trim(), out var v)) { FormatError(); return; }
         else if (name == "NTheta") { if (v < 2) { Warn("NTheta can't be less than 2!", "Change NTheta Value"); return; } nt = v; }
         else { if (v < 1) { Warn("NPhi can't be less than 1!", "Change NPhi Value"); return; } np = v; }
         if ((nt, np, type) == (j.NTheta, j.NPhi, j.Type)) return;
@@ -202,13 +225,13 @@ public sealed class FunctionListForm : Form
             Functions.SetSpecificHeats(Deck, w, text);
             return;
         }
+        if (tok == 0) { FormatError(); return; }
         if (Deck.Edit(w.B, tok, text) != null) Warn("Input must be a number!", "Input Warning");
     }
 
     void Insert()
     {
-        var sel = Selected();
-        if (sel.Count == 0) { Warn(NoRow, "Insert Operation Warning"); return; }
+        var sel = Selected();   // none selected: append at the end, as 3I's add-new row (an empty list's first function)
         string msg = kind switch
         {
             K.Fdf => "You are about to insert a blank constant value type force deflection function.\r\nYou can't undo this operation once it proceeds. Continue?",
@@ -216,8 +239,8 @@ public sealed class FunctionListForm : Form
             _ => "You are about to insert a blank record.\r\nYou can't undo this operation once it proceeds. Continue?",
         };
         if (!Ask(msg, "Insert Data")) return;
-        Functions.Insert(Deck, kind, Heads[sel[0]]);
-        Fill(); Reselect(sel[0]);
+        Functions.Insert(Deck, kind, sel.Count > 0 ? Heads[sel[0]] : null);
+        Fill(); Reselect(sel.Count > 0 ? sel[0] : grid.Rows.Count - 1);
     }
 
     void Delete()
@@ -361,10 +384,12 @@ public abstract class FunctionEditor : Form, IFunctionEditor
         }
     }
 
-    protected void Plot(double[] x, double[] y, string series, string xAxis, string yAxis)
+    protected void Plot(double[] x, double[] y, string series, string xAxis, string yAxis) => Plot([new DataPlotForm.Series(x, y, series)], xAxis, yAxis);
+
+    protected void Plot(List<DataPlotForm.Series> series, string xAxis, string yAxis)
     {
         if (plot == null || plot.IsDisposed) { plot = new DataPlotForm(); plot.Show(this); }
-        plot.SetData(x, y, series, xAxis, yAxis);
+        plot.SetData(series, xAxis, yAxis);
         plot.Activate();
     }
 
@@ -448,7 +473,10 @@ public sealed class FdfDataForm : FunctionEditor
         if (v.Count == 0) { Warn("No data to operate on.", "Plot Operation Warning"); return; }
         double lo = sub == 0 ? Num(t1.Text) : Math.Abs(f.D(1)), hi = Num(sub == 0 ? t2!.Text : t1.Text);
         var (x, y) = Functions.CurvePoints(f.Subs[sub].Type, v.Select(Num).ToList(), lo, hi);
-        Plot(x, y, sub == 0 ? "F1" : "F2", "X", "Y");
+        // FDFData.cs:675-708: the other sub-function's saved curve as a second series, colour index 4 (Gray).
+        List<DataPlotForm.Series> s = [new(x, y, sub == 0 ? "F1" : "F2")];
+        if (Functions.OtherCurve(f, sub) is { } o) s.Add(new(o.X, o.Y, sub == 0 ? "F2" : "F1", 4));
+        Plot(s, "X", "Y");
     }
 }
 

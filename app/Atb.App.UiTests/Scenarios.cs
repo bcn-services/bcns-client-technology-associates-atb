@@ -514,6 +514,153 @@ public class Scenarios
         Assert.Contains(nv, after[changed[0]]);
     }
 
+    static string[] Expected(Deck d, string name)
+    {
+        var p = Path.Combine(Robot.Out, name + ".expected.LIN");
+        File.WriteAllText(p, d.Write());
+        return File.ReadAllLines(p);
+    }
+
+    /// S2 parity, Vehicle Motion list on client deck 2645 (two vehicles): Delete on the primary is refused with 3I's text,
+    /// Copy / Insert / Replace / Delete each confirmed with 3I's box, then a title typed in the list. The saved deck equals
+    /// the same Vehicles (Renumber) operations applied in Core, and validates.
+    [Fact]
+    public void S2ParityVehicleOps()
+    {
+        const string rel = "corpus/2645/2645_ATB.LIN";
+        var copy = Robot.TempCopy(rel, Path.Combine("s2parity", "vehicles"));
+        var exp = Deck.Load(copy);
+        var clip = Vehicles.Copy(exp, 1);
+        Vehicles.Insert(exp, 1); Vehicles.Replace(exp, 1, clip); Assert.Null(Vehicles.Delete(exp, 1));
+        Vehicles.SetTitle(exp, Vehicles.Blocks(exp)[0], "HATCH");
+
+        using var r = new Robot("s2parity-vehicles", copy);
+        r.Menu("Model", "Vehicle Motion...");
+        var list = BodyWin(r, "Vehicle Motion");
+        r.Shot("list");
+        r.Click(BodyCell(r, list, "Vehicle Title Row 1"));
+        BodyAsk(r, list, "Delete Vehicle", "Delete Vehicle Operation Warning", Vehicles.PrimaryText, "OK", "primary-refused");
+        r.Click(BodyCell(r, list, "Vehicle Title Row 0"));
+        r.Click(r.Button(list, "Copy Vehicle"));
+        r.Click(BodyCell(r, list, "Vehicle Title Row 0"));
+        BodyAsk(r, list, "Insert Vehicle", Vehicles.InsertTitle, Vehicles.InsertText, "Yes", "insert-confirm");
+        Robot.UntilTrue(() => Robot.Value(BodyCell(r, list, "Vehicle Title Row 0")) == "Inserted Motion", 10, "Inserted Motion row 0");
+        r.Shot("inserted");
+        r.Click(BodyCell(r, list, "Vehicle Title Row 0"));
+        BodyAsk(r, list, "Replace Vehicle", Vehicles.ReplaceTitle, Vehicles.ReplaceText, "Yes", "replace-confirm");
+        Robot.UntilTrue(() => Robot.Value(BodyCell(r, list, "Vehicle Title Row 0")) == "DOOR", 10, "DOOR row 0");
+        r.Shot("replaced");
+        r.Click(BodyCell(r, list, "Vehicle Title Row 0"));
+        BodyAsk(r, list, "Delete Vehicle", Vehicles.DeleteTitle, Vehicles.DeleteText, "Yes", "delete-confirm");
+        Robot.UntilTrue(() => Robot.Value(BodyCell(r, list, "VehicleID Row 1")) == "2"
+                              && list.FindFirstDescendant(r.A.ConditionFactory.ByName("VehicleID Row 2")) == null, 10, "two vehicles");
+        r.Shot("deleted");
+        r.Click(BodyCell(r, list, "Vehicle Title Row 0"));
+        FlaUI.Core.Input.Keyboard.Type("HATCH");
+        Robot.Press(VirtualKeyShort.RETURN);
+        Robot.UntilTrue(() => Robot.Value(BodyCell(r, list, "Vehicle Title Row 0")) == "HATCH", 10, "title HATCH");
+        r.Shot("title-edited");
+        r.Click(r.Button(list, "Save & Exit"));
+        Robot.UntilTrue(() => FindWin(r, "Vehicle Motion") == null, 10, "Vehicle Motion closed");
+        Assert.Empty(r.Unexpected());
+        r.SaveDeck(copy);
+
+        Assert.Equal(Expected(exp, "s2parity-vehicles"), File.ReadAllLines(copy));
+        Assert.Empty(Deck.Load(copy).Validate());
+    }
+
+    void FunctionMenu(Robot r, string item)
+    {
+        r.Menu("Model", "Function");
+        var cond = r.A.ConditionFactory.ByControlType(ControlType.MenuItem).And(r.A.ConditionFactory.ByName(item));
+        r.Click(Robot.Until(() => r.A.GetDesktop().FindAllChildren(r.A.ConditionFactory.ByProcessId(r.App.ProcessId))
+            .Select(w => w.FindFirstDescendant(cond)).FirstOrDefault(e => e != null), 10, "menu item " + item));
+    }
+
+    /// S2 parity on the 2479_2 six-DOF variant: the VehOpt34 General tab ("Speed" in full), a Motion Data row added through
+    /// the grid's new row and two deleted with the Delete key (C.2.A token 8 = -rows); the first joint and wind function
+    /// inserted into their empty lists, each with 3I's non-numeric box; the FDF list's Editing Function box. The saved
+    /// deck equals the same Core operations and validates.
+    [Fact]
+    public void S2ParityGridsAndFunctions()
+    {
+        const string rel = "app/Atb.Core.Tests/fixtures/vehicles/2479_2_sixdof.LIN";
+        var copy = Robot.TempCopy(rel, Path.Combine("s2parity", "grids"));
+        var exp = Deck.Load(copy);
+        var v = Vehicles.Blocks(exp).First(x => x.Type == 2);
+        int n = Vehicles.RowCount(v);
+        Vehicles.AddRow(exp, v);
+        Assert.Null(Vehicles.EditCell(exp, Vehicles.Blocks(exp)[v.Id - 1], n, 1, "7.25"));
+        Vehicles.DeleteRow(exp, Vehicles.Blocks(exp)[v.Id - 1], 0);
+        Vehicles.DeleteRow(exp, Vehicles.Blocks(exp)[v.Id - 1], 0);
+        Functions.Insert(exp, Functions.Kind.Joint, null);
+        Functions.Insert(exp, Functions.Kind.Wind, null);
+        Assert.Equal("-" + (n - 1), Vehicles.Blocks(exp)[v.Id - 1].C2a.Tokens[8]);
+
+        using var r = new Robot("s2parity-grids", copy);
+        r.Menu("Model", "Vehicle Motion...");
+        var list = BodyWin(r, "Vehicle Motion");
+        r.Click(BodyCell(r, list, $"Vehicle Title Row {v.Id - 1}"));
+        r.Click(r.Button(list, "Edit Vehicle"));
+        var ed = BodyWin(r, Vehicles.Title(2));
+        r.Shot("sixdof-general-speed");
+        r.Click(r.Named(ed, ControlType.TabItem, "Motion  Data"));
+        r.Shot("motion-data");
+        r.Click(BodyCell(r, ed, $"Linear - X Row {n}"));   // the grid's new row
+        FlaUI.Core.Input.Keyboard.Type("7.25");
+        Robot.Press(VirtualKeyShort.RETURN);
+        Robot.UntilTrue(() => Robot.Value(BodyCell(r, ed, $"Linear - X Row {n}")) == "7.25", 10, "added row = 7.25");
+        r.Shot("row-added");
+        for (int k = 0; k < 2; k++)
+        {
+            r.Click(BodyCell(r, ed, "Time Row 0"));
+            Robot.Press(VirtualKeyShort.DELETE);
+        }
+        Robot.UntilTrue(() => Robot.Value(BodyCell(r, ed, $"Linear - X Row {n - 2}")) == "7.25", 10, "two rows deleted");
+        r.Shot("rows-deleted");
+        r.Click(r.Button(ed, "OK"));
+        Robot.UntilTrue(() => FindWin(r, Vehicles.Title(2)) == null, 10, "sub-editor closed");
+        r.Click(r.Button(list, "Save & Exit"));
+        Robot.UntilTrue(() => FindWin(r, "Vehicle Motion") == null, 10, "Vehicle Motion closed");
+
+        foreach (var (item, title, cell) in new[]
+        {
+            ("Joint Stiffness...", "Joint Stiffness Function Definition", "NTheta Row 0"),
+            ("Wind Force...", "Wind Force Function Definition", "Specific Heats Row 0"),
+        })
+        {
+            FunctionMenu(r, item);
+            var fl = BodyWin(r, title);
+            var tag = item[..4].ToLowerInvariant();
+            r.Shot(tag + "-empty-list");
+            r.Click(r.Button(fl, "Insert"));
+            r.Click(r.Button(BodyWin(r, "Insert Data"), "Yes"));
+            Robot.UntilTrue(() => FindWin(r, "Insert Data") == null && Robot.Value(BodyCell(r, fl, "FunctionID Row 0")) == "-1", 10, "first function -1");
+            r.Shot(tag + "-first-function");
+            r.Click(BodyCell(r, fl, cell));
+            FlaUI.Core.Input.Keyboard.Type("abc");
+            Robot.Press(VirtualKeyShort.RETURN);
+            var err = BodyWin(r, Functions.FormatErrorTitle);
+            r.Shot(tag + "-format-error");
+            Assert.Contains(Functions.FormatError, r.DialogText(err));
+            r.Click(r.Button(err, "OK"));
+            Robot.UntilTrue(() => FindWin(r, Functions.FormatErrorTitle) == null, 10, "format error closed");
+            r.Click(r.Button(fl, "Save & Exit"));
+            Robot.UntilTrue(() => FindWin(r, title) == null, 10, title + " closed");
+        }
+
+        FunctionMenu(r, "General FDF...");
+        var fdf = BodyWin(r, "Force Deflection Function Definition");
+        r.Shot("fdf-editing-function-box");
+        r.Click(r.Button(fdf, "Save & Exit"));
+        Robot.UntilTrue(() => FindWin(r, "Force Deflection Function Definition") == null, 10, "FDF list closed");
+        Assert.Empty(r.Unexpected());
+        r.SaveDeck(copy);
+
+        Assert.Equal(Expected(exp, "s2parity-grids"), File.ReadAllLines(copy));
+        Assert.Empty(Deck.Load(copy).Validate());
+    }
+
     const string Anim = "ATB animation";
 
     /// View > Animation: open, play, step, frames at 0/50/100%; no window other than main + viewer at any check.
