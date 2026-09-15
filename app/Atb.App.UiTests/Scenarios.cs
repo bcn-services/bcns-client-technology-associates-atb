@@ -656,7 +656,11 @@ public class Scenarios
                 Robot.UntilTrue(() => r.A.FocusedElement() is { } f
                                       && (seg = f.ControlType == ControlType.ComboBox ? f : f.Parent) is { } p && p.ControlType == ControlType.ComboBox, 10, "SegID editor open");
                 seg!.AsComboBox().Expand();
-                Robot.UntilTrue(() => seg.AsComboBox().ExpandCollapseState == FlaUI.Core.Definitions.ExpandCollapseState.Expanded, 10, "SegID list dropped");
+                // WinForms' grid combo editing control doesn't report ExpandCollapseState (run 35035065135): assert the shown list itself.
+                Robot.UntilTrue(() => seg.AsComboBox().ExpandCollapseState == FlaUI.Core.Definitions.ExpandCollapseState.Expanded
+                                      || (seg.FindFirstDescendant(r.A.ConditionFactory.ByControlType(ControlType.List)) is { } lst
+                                          && !lst.IsOffscreen && lst.FindAllChildren(r.A.ConditionFactory.ByControlType(ControlType.ListItem)).Length > 1), 10, "SegID list dropped");
+                Assert.True(seg.AsComboBox().Items.Length > 1, "SegID dropdown lists the deck's segments");
                 r.Shot("wind-segid-dropdown");
                 Robot.Press(VirtualKeyShort.ESCAPE); Robot.Press(VirtualKeyShort.ESCAPE);
             }
