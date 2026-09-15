@@ -89,6 +89,20 @@ public class BodiesTests
         Assert.Equal(18, d.Cards("F.4.A").Sum(l => l.Count));
     }
 
+    /// A copy's G.3.A rows name segments outside the body at their numbers after the insert (Renumber.Live):
+    /// 2495_2 body 1's first row names vehicle 35, which the appended copy (35-51) pushes to 52; 2479_2 body 2's first
+    /// row names segment 1, which the copy inserted before body 1 (1-15) pushes to 16.
+    [Fact]
+    public void CopiedBodyRefsOutsideTheBody_FollowTheInsert()
+    {
+        var a = Load("cases/2495/2495_2.LIN");
+        var d = Bodies.Insert(a, Bodies.Copy(a, 1), new(GebodMode.Add));
+        Assert.Equal("0 22 0 0 0 0 0 0 0 52", Toks(Row(d, "G.3.A", 35)));
+        var b = Load("cases/2479/2479_2.LIN");
+        var e = Bodies.Insert(b, Bodies.Copy(b, 2), new(GebodMode.InsertBefore, 1));
+        Assert.Equal("180 50 0 0 0 0 0 0 0 16", Toks(Row(e, "G.3.A", 1)));
+    }
+
     /// Insert the copy before body 1: the copy is segments 1-2, its NULL joint 2 roots the old body 1 (now 3-4).
     [Fact]
     public void CopyBody1AndInsertBeforeBody1_2479_RootsTheOldFirstBody()

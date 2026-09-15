@@ -4,9 +4,9 @@ LANE.md is the contract; this tracks where we are in it — if they disagree, LA
 
 ## Current position
 
-- **Status:** Round 2 (v1: every ATB 3I screen plus the installer) started; session S1 is building GEBOD Replace, the segment/joint warning, Body Summary and the Maximum Value List.
-- **Next:** the four S1 items, then S2 — Vehicle Motion and the function editors (`docs/HANDOFF-PLAN.md`).
-- **Blockers:** none. Round 1b's seven open questions are settled by the decisions in `docs/HANDOFF-PLAN.md` (copy ATB 3I).
+- **Status:** Round 2 (v1: every ATB 3I screen plus the installer), session S1 done: GEBOD Replace, the segment/joint warning, Body Summary and the Maximum Value List are built. macOS tests pass (1195); the full Windows robot run 34917011692 passed 34 of 34 scenarios; the lane acceptance review (`.claude/dev-team/lane-acceptance-report-r2-s1.md`) accepted S1.
+- **Next:** S2 — Vehicle Motion list and sub-editors, then the function editors (`docs/HANDOFF-PLAN.md`). Carry forward the review's Minor fixes: a copied body must line up with body boundaries before it pastes; the robot's 10 s late-dialog wait; mixed line endings in the delete warning; the robot never answers Yes on Insert/Replace Copied Body; STANDARDS' copied-refs line should name Replace with Copied Body too.
+- **Blockers:** none. Decisions for Nate: Body Summary's delete check used 2495_2 because 2638 has only one body; the Maximum Value List shows Value and Name and is read-only (3I shows FileID and lets you edit and save); the segment delete warning drops "Delete it anyway?" in favour of 3I's single cascade question; GEBOD Replace of body 1 in a multi-body deck keeps the next body's root joint where 3I drops it; the Body Summary buttons follow 3I's on-screen order, copied bodies' references point at the copy, and a copied body's surplus joints become -1 before removal.
 - **Last updated:** 2026-09-14
 
 ## Round 2 — v1: full ATB 3I parity + installer
