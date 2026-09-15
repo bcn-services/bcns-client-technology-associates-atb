@@ -651,9 +651,12 @@ public class Scenarios
             if (tag == "wind")
             {
                 r.Click(BodyCell(r, fl, "Velocity SegID Row 0"));
-                Robot.Press(VirtualKeyShort.F4);   // drops the combo cell's list
-                Robot.UntilTrue(() => fl.FindFirstDescendant(r.A.ConditionFactory.ByControlType(ControlType.ComboBox)) is { } cb
-                                      && cb.AsComboBox().ExpandCollapseState == FlaUI.Core.Definitions.ExpandCollapseState.Expanded, 10, "SegID list dropped");
+                Robot.Press(VirtualKeyShort.F2);   // F4 never reached the cell (run 35024899124): begin edit, then drop via UIA
+                FlaUI.Core.AutomationElements.AutomationElement? seg = null;
+                Robot.UntilTrue(() => r.A.FocusedElement() is { } f
+                                      && (seg = f.ControlType == ControlType.ComboBox ? f : f.Parent) is { } p && p.ControlType == ControlType.ComboBox, 10, "SegID editor open");
+                seg!.AsComboBox().Expand();
+                Robot.UntilTrue(() => seg.AsComboBox().ExpandCollapseState == FlaUI.Core.Definitions.ExpandCollapseState.Expanded, 10, "SegID list dropped");
                 r.Shot("wind-segid-dropdown");
                 Robot.Press(VirtualKeyShort.ESCAPE); Robot.Press(VirtualKeyShort.ESCAPE);
             }
