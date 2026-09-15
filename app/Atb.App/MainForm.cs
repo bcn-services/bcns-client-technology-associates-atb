@@ -78,7 +78,7 @@ public sealed class MainForm : Form
 
     public void Open(string path)
     {
-        deck = Deck.Load(path); deckPath = path; dirty = false;
+        deck = Deck.Load(path); deckPath = path; dirty = false; bodyClip = null;
         ShowDeck();
     }
 
@@ -86,7 +86,7 @@ public sealed class MainForm : Form
     void NewDeck()
     {
         if (running || (dirty && !ConfirmDiscard())) return;
-        deck = GebodMerge.NewDeck(); deckPath = null; dirty = true;
+        deck = GebodMerge.NewDeck(); deckPath = null; dirty = true; bodyClip = null;
         ShowDeck();
     }
 
@@ -522,7 +522,7 @@ public sealed class MainForm : Form
         // ATB 3I asks only Body.cs:1049 (ConfirmReplace, before the run); ATBUpdate drops surplus refs without a list.
         try { merged = GebodMerge.Merge(target, ain!, place, _ => true); }
         catch (Exception ex) { OfferSaveAin(ain!, "GEBOD output could not be merged: " + ex.Message); return; }
-        if (deck == null) deckPath = null;
+        if (deck == null) { deckPath = null; bodyClip = null; }
         deck = merged; dirty = true;
         ShowDeck();
     }

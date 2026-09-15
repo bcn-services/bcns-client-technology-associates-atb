@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using Atb.Core.Lin;
 
 namespace Atb.Core.Cards;
@@ -111,17 +112,56 @@ public static class Renumber
         return data;
     }
 
-    /// Point the segment (and ellipsoid) references inside copied lines through map. A copy is not in the deck, so
-    /// Insert and Delete never shift it: the caller placing a copy says where each number lands. Sign kept; 0 is no ref.
-    public static void Remap(IEnumerable<EntityData> datas, Func<int, int> map)
+    const string Held = "#";   // a copied body's reference to one of its own segments, until Place resolves it
+    static readonly ConditionalWeakTable<Deck, List<DeckLine>> carried = new();
+
+    /// Copies (Copy) of segments first..first+count-1 and joints first..first+count-2, for Place. A reference to a
+    /// copied segment is held as that copy; every other reference stays a number. Each per-segment / per-joint family
+    /// (Groups) must have one row per entity or none: the rows are positional, so a gap would give the copy the wrong one.
+    public static (List<EntityData> Segs, List<EntityData> Joints) CopyBody(Deck d, int first, int count)
     {
-        foreach (var l in datas.SelectMany(x => x.Groups).SelectMany(g => g))
+        foreach (var e in new[] { Entity.Segment, Entity.Joint })
+            foreach (var g in Groups(e))
+                if (d.Rows(g).Count is var n && n != 0 && n != Count(d, e))
+                    throw new InvalidOperationException($"The deck has {n} {g[0]} rows for {Count(d, e)} {e.ToString().ToLowerInvariant()}s; a body copy needs one per {e.ToString().ToLowerInvariant()} or none.");
+        var segs = Enumerable.Range(first, count).Select(s => Copy(d, Entity.Segment, s)).ToList();
+        var joints = Enumerable.Range(first, count - 1).Select(j => Copy(d, Entity.Joint, j)).ToList();
+        foreach (var l in segs.Concat(joints).SelectMany(x => x.Groups).SelectMany(g => g))
         {
             var t = l.Tokens.ToList();
             foreach (var i in Marked(l, Kinds(Entity.Segment)))
-                if (Num(t[i]) is int v && Ref(l, i, t[i]) is int a && a > 0) t[i] = Str(Math.Sign(v) * map(a));
+                if (Num(t[i]) is int v && Ref(l, i, t[i]) is int a && a >= first && a < first + count) t[i] = (v < 0 ? "-" : "") + Held + Str(a - first);
             l.SetTokens(t);
         }
+        return (segs, joints);
+    }
+
+    /// Runs place, which puts CopyBody's copies into d through Insert / Delete (and GebodMerge's Swap), with the copies'
+    /// lines carried: every Insert and Delete shifts or clears their numeric references by its own rules, placed yet or
+    /// not. Then each held reference becomes the number of the copied segment it names, wherever that landed.
+    public static Deck Place(Deck d, List<EntityData> segs, List<EntityData> joints, Func<Deck> place)
+    {
+        var lines = segs.Concat(joints).SelectMany(x => x.Groups).SelectMany(g => g).ToList();
+        carried.AddOrUpdate(d, lines);
+        try { place(); } finally { carried.Remove(d); }
+        var number = d.Cards(Owner(Entity.Segment)).Select((l, i) => (l, i + 1)).ToDictionary(x => x.l, x => x.Item2);
+        foreach (var l in lines)
+        {
+            var t = l.Tokens.ToList();
+            for (int i = 0; i < t.Count; i++)
+                if (t[i].TrimStart('-') is var h && h.StartsWith(Held) && int.TryParse(h[Held.Length..], out int k))
+                    t[i] = Str((t[i][0] == '-' ? -1 : 1) * number[segs[k].Groups[0][0]]);
+            l.SetTokens(t);
+        }
+        return d;
+    }
+
+    /// d's lines, then the carried copies Place has not put in it yet.
+    static IEnumerable<DeckLine> Live(Deck d)
+    {
+        if (!carried.TryGetValue(d, out var c)) return d.Lines;
+        var inDeck = d.Lines.ToHashSet();
+        return d.Lines.Concat(c.Where(l => !inDeck.Contains(l)));
     }
 
     /// ATB 3I TableForm.cs:412-440: asked once when grid rows of segments (B2B6M) / joints (B3B4B5M) are inserted or deleted.
@@ -225,9 +265,10 @@ public static class Renumber
     /// Clear or drop every marked ref to num (count-led lists lose the entry, others get the card's blank) and shift refs > num down.
     static void Unref(Deck d, Kind[] kinds, int num, HashSet<DeckLine> drop)
     {
-        for (int li = 0; li < d.Lines.Count; li++)
+        var live = Live(d).ToList();   // carried copies are B.2/B.6/G.3.A/B.3-B.5: never count-led or cascaded
+        for (int li = 0; li < live.Count; li++)
         {
-            var l = d.Lines[li];
+            var l = live[li];
             if (drop.Contains(l)) continue;
             var idx = Marked(l, kinds).ToList();
             if (idx.Count == 0) continue;
@@ -264,7 +305,7 @@ public static class Renumber
         Check(d, e, n, insert: true);
         int num = Number(d, e, n);
         var kinds = Kinds(e);
-        foreach (var l in d.Lines)
+        foreach (var l in Live(d))
         {
             var t = l.Tokens.ToList();
             foreach (var i in Marked(l, kinds))

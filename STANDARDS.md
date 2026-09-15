@@ -8,6 +8,7 @@
 ## Deck editing
 - **Delete outcome matches the solver's read**: for each ref a delete clears or drops, check the result against the `src/*.for` read — a count-led list whose Count hits 0 is removed or blocked when the solver requires >= 1 (H.10.B drops with H.10.C; H.11 STOP 741), and a blanked 0 is only valid where the solver guards SEG(0).
 - **Byte-for-byte round-trip**: mutate lines through DeckLine.SetTokens / Set*, which clear Raw only when a token changes; untouched lines must write back byte-identical.
+- **Per-entity card families are positional**: `Renumber.Owned` / `Deck.Rows` give entity n the n-th row of each group (B.2/B.6/G.3.A per segment, B.3/B.4/B.5 per joint), so a family missing in the middle is invisible. Whole-body ops that copy or place entities check each family's row count is 0 or the entity count before touching the deck.
 - **Core stays UI-free**: Atb.Core takes a confirm callback (e.g. `Func<IReadOnlyList<RefSite>, bool>`) for any destructive step; MainForm supplies the MessageBox. Decline = no mutation.
 
 ## Tests

@@ -137,4 +137,16 @@ public class BodiesTests
         Assert.Equal("\"P \" 16 0 -2.835566 0 -1.744625 -3.676071 0 2.067626 0 0 0", Toks(Row(d, "B.3.A", 16)));  // the old body 2, 3 -> 16
         Assert.Equal("\"NULL\" 0 0 0 0 0 0 0 0 0 0 0", Toks(Row(d, "B.3.A", 15)));
     }
+
+    /// Families are positional (STANDARDS.md): a G.3.A missing mid-deck would hand the copy segment 6's row as segment 5's.
+    [Fact]
+    public void CopyBody_FamilyMissingForOneSegment_Throws()
+    {
+        var o = Load("cases/2479/2479_2.LIN");
+        o.Lines.Remove(Row(o, "G.3.A", 5));
+        var c = Bodies.Copy(o, 2);
+        var ex = Assert.Throws<InvalidOperationException>(() => Bodies.Insert(o, c, new(GebodMode.Add)));
+        Assert.Contains("G.3.A", ex.Message);
+        Assert.Throws<InvalidOperationException>(() => Bodies.Replace(o, 1, c));
+    }
 }

@@ -5,7 +5,7 @@ namespace Atb.Core.Cards;
 /// Whole-body operations of ATB 3I's "Body Editing Form" (decomp ATB3I/Body.cs): the body table, Copy Body,
 /// Add/Insert Copied Body, Replace Body with Copied Body and Delete Body. Each returns a new deck; the one passed in is
 /// never touched. Segments and joints go in and out through Renumber (via GebodMerge.AddBody / ReplaceBody, shared
-/// with GEBOD), and the copied lines' own segment numbers are pointed at their new place by Renumber.Remap.
+/// with GEBOD); Renumber.CopyBody / Place carry the copy's references through those inserts and deletes.
 public static class Bodies
 {
     /// One row of 3I's body table (FillBodyTable): body number, segments, joints (the body's own NULL joint excluded).
@@ -37,8 +37,8 @@ public static class Bodies
     {
         var d = GebodMerge.Editable(deck);
         int s0 = GebodMerge.Start(d, p);
-        var (segs, joints) = Take(d, c, v => v >= c.First && v < c.First + c.Segments ? s0 + v - c.First : v >= s0 ? v + c.Segments : v);
-        return Placed(segs, joints, () => GebodMerge.AddBody(d, s0, segs, joints));
+        var (segs, joints) = Take(d, c);
+        return Renumber.Place(d, segs, joints, () => GebodMerge.AddBody(d, s0, segs, joints));
     }
 
     /// Replace Body with Copied Body (Body.cs:860): body k takes the copy by position through GebodMerge.ReplaceBody,
@@ -49,13 +49,8 @@ public static class Bodies
         var d = GebodMerge.Editable(deck);
         var starts = GebodMerge.BodyStarts(d);
         if (k < 1 || k > starts.Count) throw new ArgumentOutOfRangeException(nameof(k), $"Body {k} is outside 1..{starts.Count}.");
-        int a = starts[k - 1], so = Summary(d)[k - 1].Segments, sn = c.Segments;
-        var (segs, joints) = Take(d, c, v =>
-            v >= c.First && v < c.First + sn ? a + v - c.First
-            : v < a ? v
-            : v < a + so ? (v - a < sn ? v : 0)                         // a surplus position of the old body: dropped
-            : v + sn - so);
-        return Placed(segs, joints, () => GebodMerge.ReplaceBody(d, k, segs, joints, _ => true));   // 3I asks Body.cs:860 only
+        var (segs, joints) = Take(d, c);
+        return Renumber.Place(d, segs, joints, () => GebodMerge.ReplaceBody(d, k, segs, joints, _ => true));   // 3I asks Body.cs:860 only
     }
 
     /// ATB 3I DeleteBody (Body.cs:1078-1124): segments a..b-1; joints a..b-1 (the next body's NULL joint b-1, so body
@@ -75,25 +70,11 @@ public static class Bodies
         return d;
     }
 
-    /// Fresh copies of the copied body's lines (Renumber.Copy: every group, list values 0) with their segment numbers
-    /// mapped to where they land.
-    static (List<EntityData>, List<EntityData>) Take(Deck d, Copied c, Func<int, int> map)
+    /// The copied body's lines (Renumber.CopyBody), if it is still in the deck.
+    static (List<EntityData>, List<EntityData>) Take(Deck d, Copied c)
     {
         if (c.Segments < 1 || c.First < 1 || c.First + c.Segments - 1 > Renumber.Count(d, Entity.Segment))
             throw new InvalidOperationException("The copied body is no longer in the deck.");
-        var segs = Enumerable.Range(c.First, c.Segments).Select(s => Renumber.Copy(d, Entity.Segment, s)).ToList();
-        var joints = Enumerable.Range(c.First, c.Segments - 1).Select(j => Renumber.Copy(d, Entity.Joint, j)).ToList();
-        Renumber.Remap(segs.Concat(joints), map);
-        return (segs, joints);
-    }
-
-    /// Runs place, then puts back the copied lines' tokens: Renumber.Insert shifts every line already in the deck,
-    /// the copies it placed a moment earlier included, and the Remap above already gave them their final numbers.
-    static Deck Placed(List<EntityData> segs, List<EntityData> joints, Func<Deck> place)
-    {
-        var lines = segs.Concat(joints).SelectMany(x => x.Groups).SelectMany(g => g).Select(l => (l, t: l.Tokens.ToList())).ToList();
-        var d = place();
-        foreach (var (l, t) in lines) l.SetTokens(t);
-        return d;
+        return Renumber.CopyBody(d, c.First, c.Segments);
     }
 }
