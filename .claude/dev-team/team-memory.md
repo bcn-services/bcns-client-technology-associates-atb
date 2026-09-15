@@ -132,3 +132,18 @@
 - **What worked:** orchestrator mutations each reddened the intended literal test: (a) poly Horner → CurvePointsPolynomial; (b) table step → TableInterpolationFollowsEvalfdTable + CurvePointsTabular; (c) SetBlock count check flipped → EveryFunctionOpensAndUneditedSaveChangesZeroBytes (+2 edit tests); (d) FunctionType D1<0,D2<0 → SignDrivenModeRule(-3,-4).
 - **What failed:** orchestrator's first perl mutation of (b) silently failed on a `/` in the pattern — use `s#...#...#` delimiters.
 - **Remember next run:** Done-when vs reality: no client deck in cases/ or corpus/ has E.6 or E.7 (NWINDF=0, no B.4.A<0) — wind/joint use synthetic fixtures app/Atb.Core.Tests/fixtures/functions/2479_2_{wind,joint}.LIN; wind has no plot in 3I so its robot case screenshots the table (4 of 5 plots). A freshly inserted blank wind function (ID -1, zero rows) breaks the solver — 3I writes the same. Parity gaps: D3/D4 and wind column captions unchecked vs mdb; "Editing Function" listbox shows 1 item on Server 2022 (3I 2); constant prompt is a lookalike, not VB InputBox; robot doesn't drive Insert/Delete/Copy/Paste or confirm dialogs (Core-tested only). Review flags: SetBlock regenerates whole block on count change; SetNWindF on decks already having F.7. 7 divergences in STANDARDS.md.
+
+## 2026-09-15 14:20 — dev-team-auto — S2 parity fixes
+- **Outcome:** BLOCKED — 2 attempts (attempt 2 stopped at the one-hour limit) — caution: yes — team: dt-engineer opus/high, dt-qa opus/high, dt-review opus/high, dt-engineer opus/xhigh — r2-s3, checkpoint 1e259fb
+- **What happened:** Attempt 1 built (a)–(h) across Core, forms and the robot (1272 tests, Windows run 35021573881 green 13/13). QA FAILED the robot done-when: there was no two-series FDF shot, no Copy Vehicle shot, and the wind dropdown was only shot closed. Review found 0 Critical, 4 Important, 4 Minor. The attempt-2 fix pass (1276 tests on the Mac) was stopped: its App and UiTests edits are uncompiled, and it has no Windows run and no delta QA or review.
+- **What worked:** Running QA and review in parallel. The review showed Renumber's >= NSEG+n shift leaves body-segment refs alone on 2480_4/5. Vehicle.cs:589-601 settles the inserted token 13.
+- **What failed:** The attempt-1 robot left out screenshots the done-when names (Copy, two-series plot). UserAddedRow wrote a deck row with no cancel path. Confirmation texts were pinned only to their own constants. CancelRowEdit fires only in VirtualMode (fixed with RowsRemoved → Vehicles.TrimRows).
+- **Remember next run:** Resume at 1e259fb:
+  - compile App and UiTests;
+  - mutation-check TrimRows and the token-13 post-step;
+  - dispatch app-e2e with S2ParityVehicleOps|S2ParityGridsAndFunctions|VehicleMotionEditors|FunctionEditors and read these PNGs: the two-series plot (fixture 2479_2_fdf2.LIN), copied, row-cancelled, wind-segid-dropdown. F4 may not open the combo cell; Alt+Down is the fallback;
+  - then run a delta QA and review over 3618cf2..HEAD.
+  
+  Human call, recorded in STANDARDS.md: 3I skips the ref update when the selected SegID <= NSEG, while we shift through Renumber.
+  
+  For every robot done-when, check that each step it names has an r.Shot before the Windows run.
