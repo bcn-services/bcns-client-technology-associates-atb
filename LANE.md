@@ -151,7 +151,7 @@ Context: `docs/HANDOFF-PLAN.md` (sessions, decisions), `docs/TIER2-SCOPE.md` (sc
     - Every E.* function in `cases/` and `corpus/` opens, and saving it unedited changes zero bytes (unit test)
     - The plot's curve points come from one `Atb.Core` function, unit-tested for a constant, a polynomial and a tabular function
     - A robot scenario opens each editor on a client deck and screenshots the plot, in a green `app-e2e.yml` run
-  status: not started
+  status: done (a4b7870, Windows run 34924273082)
 
 > **⚠️ AUTONOMOUS RUN — STOP HERE**
 
