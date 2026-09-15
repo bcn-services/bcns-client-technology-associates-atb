@@ -231,15 +231,16 @@ public sealed class FunctionListForm : Form
 
     void Insert()
     {
-        var sel = Selected();   // none selected: append at the end, as 3I's add-new row (an empty list's first function)
+        var sel = Selected();   // none selected: append at the end with no confirmation, as 3I's add-new row
         string msg = kind switch
         {
             K.Fdf => "You are about to insert a blank constant value type force deflection function.\r\nYou can't undo this operation once it proceeds. Continue?",
             K.Joint => "You are about to insert a blank tabular type joint stiffness function.\r\nYou can't undo this operation once it proceeds. Continue?",
             _ => "You are about to insert a blank record.\r\nYou can't undo this operation once it proceeds. Continue?",
         };
-        if (!Ask(msg, "Insert Data")) return;
-        Functions.Insert(Deck, kind, sel.Count > 0 ? Heads[sel[0]] : null);
+        if (sel.Count > 0 && !Ask(msg, "Insert Data")) return;
+        try { Functions.Insert(Deck, kind, sel.Count > 0 ? Heads[sel[0]] : null); }
+        catch (InvalidOperationException e) { Warn(e.Message, "Insert Operation Warning"); return; }
         Fill(); Reselect(sel.Count > 0 ? sel[0] : grid.Rows.Count - 1);
     }
 

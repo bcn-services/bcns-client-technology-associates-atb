@@ -249,6 +249,8 @@ public abstract class VehEditor : Form
         // AllowAddNew / AllowDelete: the new row becomes a zero deck row at once and Delete removes the current row, each
         // rewriting Interpolated Points (C.2.A token 8) / Number of Data Points (C.2.B token 2) from the row count.
         Grid.UserAddedRow += (_, _) => { if (!loading) Vehicles.AddRow(Deck, B); };
+        // Esc on the new row removes it from the grid (CancelRowEdit fires only in VirtualMode): its deck row goes too.
+        Grid.RowsRemoved += (_, _) => { if (!loading) Vehicles.TrimRows(Deck, B.Id, Grid.Rows.Count - (Grid.AllowUserToAddRows ? 1 : 0)); };
         Grid.KeyDown += (_, e) =>
         {
             if (e.KeyCode != Keys.Delete || Grid.IsCurrentCellInEditMode || Grid.CurrentCell is not { } c || c.RowIndex >= Vehicles.RowCount(B)) return;

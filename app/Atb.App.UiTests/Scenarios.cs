@@ -455,6 +455,8 @@ public class Scenarios
     [
         ["cases/2479/2479_2.LIN", "General FDF...", 3, "Polynomial FDF Data Definition", "Coef Row 1", "Plot"],
         ["cases/2479/2479_2.LIN", "General FDF...", 6, "Tabular FDF Data Definition", "Y Row 1", "Plot"],
+        // function 7 with a polynomial F2 too: the plot draws F1 and F2's saved curve (two series)
+        ["app/Atb.Core.Tests/fixtures/functions/2479_2_fdf2.LIN", "General FDF...", 6, "Tabular FDF Data Definition", "Y Row 1", "Plot"],
         ["app/Atb.Core.Tests/fixtures/functions/2479_2_joint.LIN", "Joint Stiffness...", 0, "Joint Stiffness Function Data", "Theta 0 Row 1", "Plot Current Row"],
         ["app/Atb.Core.Tests/fixtures/functions/2479_2_joint.LIN", "Joint Stiffness...", 1, "Joint Stiffness Function Data", "C1 Row 0", "Plot Current Row"],
         ["app/Atb.Core.Tests/fixtures/functions/2479_2_wind.LIN", "Wind Force...", 0, "Wind Force Time History Data (Function No.1)", "Fx Row 1", ""],
@@ -542,6 +544,7 @@ public class Scenarios
         BodyAsk(r, list, "Delete Vehicle", "Delete Vehicle Operation Warning", Vehicles.PrimaryText, "OK", "primary-refused");
         r.Click(BodyCell(r, list, "Vehicle Title Row 0"));
         r.Click(r.Button(list, "Copy Vehicle"));
+        r.Shot("copied");
         r.Click(BodyCell(r, list, "Vehicle Title Row 0"));
         BodyAsk(r, list, "Insert Vehicle", Vehicles.InsertTitle, Vehicles.InsertText, "Yes", "insert-confirm");
         Robot.UntilTrue(() => Robot.Value(BodyCell(r, list, "Vehicle Title Row 0")) == "Inserted Motion", 10, "Inserted Motion row 0");
@@ -606,6 +609,14 @@ public class Scenarios
         r.Shot("sixdof-general-speed");
         r.Click(r.Named(ed, ControlType.TabItem, "Motion  Data"));
         r.Shot("motion-data");
+        // a value typed into the new row, then Esc: the row leaves the grid and the deck (the saved-deck check below)
+        r.Click(BodyCell(r, ed, $"Linear - X Row {n}"));
+        FlaUI.Core.Input.Keyboard.Type("9");
+        Robot.UntilTrue(() => ed.FindFirstDescendant(r.A.ConditionFactory.ByName($"Linear - X Row {n + 1}")) != null, 10, "row typed");
+        r.Shot("row-typed");
+        Robot.Press(VirtualKeyShort.ESCAPE); Robot.Press(VirtualKeyShort.ESCAPE);
+        Robot.UntilTrue(() => ed.FindFirstDescendant(r.A.ConditionFactory.ByName($"Linear - X Row {n + 1}")) == null, 10, "new row cancelled");
+        r.Shot("row-cancelled");
         r.Click(BodyCell(r, ed, $"Linear - X Row {n}"));   // the grid's new row
         FlaUI.Core.Input.Keyboard.Type("7.25");
         Robot.Press(VirtualKeyShort.RETURN);
@@ -633,10 +644,19 @@ public class Scenarios
             var fl = BodyWin(r, title);
             var tag = item[..4].ToLowerInvariant();
             r.Shot(tag + "-empty-list");
-            r.Click(r.Button(fl, "Insert"));
-            r.Click(r.Button(BodyWin(r, "Insert Data"), "Yes"));
-            Robot.UntilTrue(() => FindWin(r, "Insert Data") == null && Robot.Value(BodyCell(r, fl, "FunctionID Row 0")) == "-1", 10, "first function -1");
+            r.Click(r.Button(fl, "Insert"));   // nothing selected: 3I's add-new row, no confirmation
+            Robot.UntilTrue(() => Robot.Value(BodyCell(r, fl, "FunctionID Row 0")) == "-1", 10, "first function -1");
+            Assert.Null(FindWin(r, "Insert Data"));
             r.Shot(tag + "-first-function");
+            if (tag == "wind")
+            {
+                r.Click(BodyCell(r, fl, "Velocity SegID Row 0"));
+                Robot.Press(VirtualKeyShort.F4);   // drops the combo cell's list
+                Robot.UntilTrue(() => fl.FindFirstDescendant(r.A.ConditionFactory.ByControlType(ControlType.ComboBox)) is { } cb
+                                      && cb.AsComboBox().ExpandCollapseState == FlaUI.Core.Definitions.ExpandCollapseState.Expanded, 10, "SegID list dropped");
+                r.Shot("wind-segid-dropdown");
+                Robot.Press(VirtualKeyShort.ESCAPE); Robot.Press(VirtualKeyShort.ESCAPE);
+            }
             r.Click(BodyCell(r, fl, cell));
             FlaUI.Core.Input.Keyboard.Type("abc");
             Robot.Press(VirtualKeyShort.RETURN);

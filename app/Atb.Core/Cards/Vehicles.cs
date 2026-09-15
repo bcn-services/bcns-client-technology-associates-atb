@@ -135,9 +135,14 @@ public static class Vehicles
     // ATB3iData.mdb column defaults are read.
     public static void Insert(Deck d, int n)
     {
+        int seg = SegId(d, Blocks(d)[n - 1]), nseg = d.SegmentCount;
+        var c2a = new DeckLine(Enumerable.Repeat("0", 14), Labeler.LabelFor("C.2.A"));
         var data = new EntityData();
-        data.Groups.Add([new DeckLine(["\"Inserted Motion\""], Labeler.LabelFor("C.1")), new DeckLine(Enumerable.Repeat("0", 14), Labeler.LabelFor("C.2.A"))]);
+        data.Groups.Add([new DeckLine(["\"Inserted Motion\""], Labeler.LabelFor("C.1")), c2a]);
         Renumber.Insert(d, Entity.Vehicle, n, data);
+        // Vehicle.cs:589-601: the new vehicle's Vehicle Segment is the selected vehicle's SegID (num2). Renumber wrote
+        // NSEG + n, the same unless the selected vehicle rides a body segment (<= NSEG); only the new line changes here.
+        if (seg <= nseg) c2a.Set(13, seg.ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
 
     /// btnCopy: vehicle n's C.1-C.5 lines, for Replace.
@@ -189,6 +194,12 @@ public static class Vehicles
         if (b.Type == 1) { var v = b.Data.SelectMany(l => l.Tokens).ToList(); v.RemoveAt(row); SetC3(d, b, v); return; }
         d.Lines.Remove(b.DataRows[row]);
         SetRowCount(b, b.DataRows.Count - 1);
+    }
+
+    /// The grid dropped its uncommitted new row (Esc): vehicle id's deck rows past the grid's `rows` go too.
+    public static void TrimRows(Deck d, int id, int rows)
+    {
+        while (Blocks(d)[id - 1] is var b && RowCount(b) > rows) DeleteRow(d, b, RowCount(b) - 1);
     }
 
     /// C.3 values rewritten 12 a line (unlabelled, as the decks and 3I's writer have them); Interpolated Points = count.

@@ -1,7 +1,9 @@
 # Engineer Report
 Branch: r2-s3
 Commits: 2b72d3a (core checkpoint), 64461c8 (forms + robot)
-Gate: dotnet test app/Atb.sln — 1272 passed, 0 failed (baseline 1262; +10 in S2ParityTests)
+Gate: dotnet test app/Atb.sln — 1276 passed, 0 failed (fix pass wip checkpoint; was 1272). Atb.App / UiTests not compiled on Mac — unverified until a Windows run
+Fix pass (wip, stopped on time): items 1-7 + both minors coded; NOT done: push, Windows app-e2e run, PNG read, mutation checks (TrimRows guard, Insert SegID post-step)
+Item 7: implemented (decompile Vehicle.cs:589-601 unambiguous: new Vehicle Segment = selected SegID) as a Core post-step on the new C.2.A only; the no-ref-shift-when-SegID<=NSEG part recorded as a STANDARDS.md divergence for Nate
 Windows run: https://github.com/bcn-services/bcns-client-technology-associates-atb/actions/runs/35021573881 — success, 13/13 (S2ParityVehicleOps, S2ParityGridsAndFunctions, VehicleMotionEditors, FunctionEditors)
 PNGs read: Speed label whole; row add 7.25/delete 2 visible; "ATB 3I" Error-icon box; F1+F2 listbox bold Navy; primary refusal; insert confirm; title HATCH — nothing visibly wrong
 **Task:** S2 parity fixes (a)-(h) · **Date:** 2026-09-15

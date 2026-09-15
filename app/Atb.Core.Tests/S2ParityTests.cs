@@ -165,4 +165,74 @@ public class S2ParityTests
         var d = Load("cases/2479/2479_2.LIN");
         Assert.Equal("Input string was not in correct format!", Functions.SetId(d, Functions.Fdfs(d)[0].E1, "abc"));
     }
+
+    /// Copied from ~/atb-work/p0/decomp/ATB3I/Vehicle.cs :582 (insert), :407 (delete), :684 (replace), :404 (primary).
+    [Fact]
+    public void VehicleConfirmationTextsAre3IsLiterals()
+    {
+        Assert.Equal("You are about to insert a prescribed motion.  ATB 3I will\r\ncascade update other input cards for segment numbering.\r\nYou can't undo this operation once it proceeds.  Continue?", Vehicles.InsertText);
+        Assert.Equal("Insert Prescribed Motion", Vehicles.InsertTitle);
+        Assert.Equal("You are about to delete a prescribed motion.  ATB 3I will\r\ncascade update other input cards for segment numbering.\r\nYou can't undo this operation once it proceeds. Continue?", Vehicles.DeleteText);
+        Assert.Equal("Delete Prescribed Motion", Vehicles.DeleteTitle);
+        Assert.Equal("You are about to replace the selected prescribed motion with a copied prescribed motion.\r\nYou can't undo this operation once it proceeds. Continue?", Vehicles.ReplaceText);
+        Assert.Equal("Replace Vehicle", Vehicles.ReplaceTitle);
+        Assert.Equal("You can't delete the primary vehicle.", Vehicles.PrimaryText);
+    }
+
+    /// 2480_4 (NSEG 18): vehicle 1 "Subaru" rides body segment 16. Insert before it: the new vehicle takes Subaru's
+    /// SegID 16 (3I's num2), body refs to 16 stay, vehicle-segment refs shift through Renumber; deleting it restores the deck.
+    [Fact]
+    public void VehicleInsertAndDeleteOn2480_4KeepBodySegmentRefs()
+    {
+        var d = Load("corpus/2480/2480_4.LIN"); var w = d.Write(); var a = L(d);
+        Vehicles.Insert(d, 1);
+        var b = L(d);
+        Assert.Equal("0    0    0    0    0    0    0    0    0    0    0    0    0    16    CARD C.2.a", b[Array.IndexOf(b, "\"Inserted Motion\"    CARD C.1") + 1]);
+        Assert.Contains("0    0    0    0    0    0    0    0    -501    0    0.005    0    0    16    CARD C.2.a", b);
+        Assert.Contains("1    16    8    8    5    0    6    19    7    -2    0    CARD F.1.b", b);
+        Assert.Contains("0    20    0    0    0    0    3    2    1    20    CARD G.3.a", Added(a, b));
+        Assert.Contains("0    20    0    0    0    0    3    2    1    19    CARD G.3.a", Removed(a, b));
+        Assert.Equal(a.Length + 2, b.Length);
+        Valid(d);
+        Assert.Null(Vehicles.Delete(d, 1));
+        Assert.Equal(w, d.Write());
+
+        Assert.Null(Vehicles.Delete(d, 1));   // Subaru itself
+        var c = L(d);
+        Assert.DoesNotContain("\"Subaru\"    CARD C.1", c);
+        Assert.Contains("1    16    8    8    5    0    6    19    7    -2    0    CARD F.1.b", c);
+        Assert.Single(Vehicles.Blocks(d));
+        Valid(d);
+    }
+
+    /// Esc on the grid's new row: the deck rows past the grid's count go, and the deck is back to its bytes.
+    [Fact]
+    public void TrimRowsDropsTheCancelledNewRow()
+    {
+        var d = Load("cases/2479/2479_2.LIN"); var w = d.Write();
+        int id = Vehicles.Blocks(d).First(x => x.Type == 5).Id;
+        Vehicles.TrimRows(d, id, 3);
+        Assert.Equal(w, d.Write());
+        Vehicles.AddRow(d, Vehicles.Blocks(d)[id - 1]);
+        Assert.Contains("3    1    4    0    0    0    CARD C.2.b", L(d));
+        Vehicles.TrimRows(d, id, 3);
+        Assert.Equal(w, d.Write());
+
+        var e = Load("corpus/2210/2210_1.LIN"); var we = e.Write();
+        int t1 = Vehicles.Blocks(e).First(x => x.Type == 1).Id;
+        Vehicles.AddRow(e, Vehicles.Blocks(e)[t1 - 1]);
+        Vehicles.TrimRows(e, t1, 43);
+        Assert.Equal(we, e.Write());
+    }
+
+    /// The robot's two-series plot fixture: 2479_2 function 7 with a polynomial F2 over [|D1|, |D2|] = [3, 4].
+    [Fact]
+    public void FdfTwoSeriesFixtureHasBothSubFunctions()
+    {
+        var f = Functions.Fdfs(Load("app/Atb.Core.Tests/fixtures/functions/2479_2_fdf2.LIN"))[6];
+        Assert.Equal((2, 1), (f.F1, f.F2));
+        Assert.Equal(new double[] { 0, 0.25, 0.5, 2, 3 }, Functions.OtherCurve(f, 1)!.Value.X);
+        var (x, _) = Functions.OtherCurve(f, 0)!.Value;
+        Assert.Equal((3.0, 4.0), (x[0], x[^1]));
+    }
 }
