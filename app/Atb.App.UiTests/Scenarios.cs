@@ -272,8 +272,16 @@ public class Scenarios
         r.A.GetDesktop().FindAllChildren(r.A.ConditionFactory.ByProcessId(r.App.ProcessId))
             .SelectMany(w => new[] { w }.Concat(w.FindAllDescendants(r.A.ConditionFactory.ByControlType(ControlType.Window))))
             .FirstOrDefault(w => w.Name == title);
-    static AutomationElement BodyCell(Robot r, AutomationElement form, string name) =>
-        Robot.Until(() => form.FindFirstDescendant(r.A.ConditionFactory.ByName(name)), 15, "Body table cell " + name);
+    static AutomationElement BodyCell(Robot r, AutomationElement form, string name)
+    {
+        try { return Robot.Until(() => form.FindFirstDescendant(r.A.ConditionFactory.ByName(name)), 15, "Body table cell " + name); }
+        catch (TimeoutException)
+        {
+            r.Shot("no-cell");
+            r.Log("Body form elements: " + string.Join(" | ", form.FindAllDescendants().Take(80).Select(e => $"{e.ControlType}:{e.Name}")));
+            throw;
+        }
+    }
     static AutomationElement BodyWin(Robot r, string title) => Robot.Until(() => FindWin(r, title), 30, $"'{title}' window");
 
     /// Clicks `button` on the Body form, waits for 3I's box `title`, checks its text, screenshots it, answers `answer`.
@@ -296,8 +304,8 @@ public class Scenarios
         var before = File.ReadAllText(copy);
         using var r = new Robot("body-summary-dialogs", copy);
         var f = OpenBodySummary(r);
-        Assert.Equal("15", Robot.Value(BodyCell(r, f, "Number of Seg Row 1")));
         r.Shot("body-form");
+        Assert.Equal("15", Robot.Value(BodyCell(r, f, "Number of Seg Row 1")));
         r.Click(r.Button(f, "Add/Insert Copied Body"));
         var w = BodyWin(r, "Add/Insert Body Operation Warning");
         r.Shot("empty-clipboard-warning");
@@ -327,6 +335,7 @@ public class Scenarios
         var want = Bodies.Delete(Deck.Load(copy), 2);
         using var r = new Robot("body-summary-delete", copy);
         var f = OpenBodySummary(r);
+        r.Shot("body-form");
         r.Click(BodyCell(r, f, "BodyID Row 1"));
         r.Shot("body2-selected");
         BodyAsk(r, f, "Delete Body", "Delete Body", DeleteText, "Yes", "delete-confirm");
