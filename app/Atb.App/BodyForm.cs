@@ -37,7 +37,8 @@ public sealed class BodyForm : Form
         Deck = deck; Clip = clip;
         Text = "Body Editing Form"; ClientSize = new Size(496, 278); FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = MinimizeBox = false; StartPosition = FormStartPosition.CenterParent;
-        foreach (var h in new[] { "BodyID", "Number of Seg", "Number of Jnt" }) grid.Columns.Add(h, h);
+        foreach (var h in new[] { "BodyID", "Number of Seg", "Number of Jnt" })
+            grid.Columns[grid.Columns.Add(h, h)].SortMode = DataGridViewColumnSortMode.NotSortable;   // row i is body i+1
         Controls.Add(new Label { Text = "General Description", Location = new Point(8, 8), Size = new Size(128, 16), ForeColor = Color.Green, Font = new Font(Font, FontStyle.Bold) });
         Controls.Add(title); Controls.Add(grid);
         Btn(8, "Copy Body", CopyBody, true);
