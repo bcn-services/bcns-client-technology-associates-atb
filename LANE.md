@@ -127,8 +127,6 @@ Context: `docs/HANDOFF-PLAN.md` (sessions, decisions), `docs/TIER2-SCOPE.md` (sc
     - A robot scenario opens the screen and screenshots it, in a green `app-e2e.yml` run (URL in the item report)
   status: done
 
-> **⚠️ AUTONOMOUS RUN — STOP HERE**
-
 ### S2 — Vehicle Motion, function editors
 
 - task: Vehicle Motion list (§2 #10) and its four sub-editors (half-sine, unidirectional, 6-DOF, spline P/V/A)
@@ -154,6 +152,8 @@ Context: `docs/HANDOFF-PLAN.md` (sessions, decisions), `docs/TIER2-SCOPE.md` (sc
     - The plot's curve points come from one `Atb.Core` function, unit-tested for a constant, a polynomial and a tabular function
     - A robot scenario opens each editor on a client deck and screenshots the plot, in a green `app-e2e.yml` run
   status: not started
+
+> **⚠️ AUTONOMOUS RUN — STOP HERE**
 
 ### S3 — Run Control, Output Control, HIC/CSI
 
