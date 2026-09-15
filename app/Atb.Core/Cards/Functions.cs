@@ -308,7 +308,7 @@ public static class Functions
 
     public static string? SetId(Deck d, DeckLine head, string text)
     {
-        if (!int.TryParse(text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var id)) return "Input string was not in correct format!";
+        if (!int.TryParse(text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var id)) return FormatError;
         if (IdUsed(d, id, head)) return "This ID has been used by other functions!";
         SetTok(head, 0, id.ToString(CultureInfo.InvariantCulture));
         return null;
@@ -411,11 +411,44 @@ public static class Functions
         };
     }
 
-    /// Insert a blank function before the selected one (GenList.btnInsert -> GridInsertRow).
-    public static void Insert(Deck d, Kind k, DeckLine before)
+    /// 3I's grid error for non-numeric list input (ATBGrid.cs:2523-2528, :2728-2733): this text, this title, Error icon.
+    public const string FormatError = "Input string was not in correct format!", FormatErrorTitle = "ATB 3I";
+
+    /// E.7 terminator a first joint function brings when the deck has no E.7 section (FunctionID >= 51, as the fixtures').
+    static DeckLine JointTerminator() => new(["999", "\"\""], Labeler.LabelFor("E.7.A"));
+
+    /// Insert a blank function before the selected one (GenList.btnInsert -> GridInsertRow), or with no selection at the
+    /// end of the list (3I's add-new row, ATBGrid.grdDB_OnAddNew: ID GridFindMin - 1; a joint 2 x 1 tabular). A first
+    /// joint function in a deck with no E.7 section brings the section's terminator; a first wind one D.1.A NWINDF / F.7.A.
+    public static void Insert(Deck d, Kind k, DeckLine? before)
     {
-        d.Lines.InsertRange(d.Lines.IndexOf(before), Blank(k, NewId(d, k)));
+        var lines = Blank(k, NewId(d, k));
+        int at = before != null ? d.Lines.IndexOf(before) : End(d, k);
+        if (at < 0 && k == Kind.Joint) { at = Renumber.Place(d, "E.7.A"); lines.Add(JointTerminator()); }
+        if (at < 0) throw new InvalidOperationException($"The deck has no place for a {k} function (no E.1 terminator).");
+        d.Lines.InsertRange(at, lines);
         if (k == Kind.Wind) SetNWindF(d, NWindF(d) + 1);
+    }
+
+    /// Line index just past the list's last function, else where its first goes (-1: no section to put it in).
+    static int End(Deck d, Kind k)
+    {
+        var heads = Heads(d, k);
+        if (heads.Count > 0) return d.Lines.IndexOf(LinesOf(d, k, heads[^1])[^1]) + 1;
+        return k == Kind.Fdf ? (FdfEnd(d) is { } e ? d.Lines.IndexOf(e) : -1)
+            : k == Kind.Joint ? (JointEnd(d) is { } je ? d.Lines.IndexOf(je) : -1)
+            : WindAnchor(d);
+    }
+
+    /// FDFData.btnPlot's second series (FDFData.cs:675-708): the other sub-function's saved curve (F2 while editing F1,
+    /// F1 while editing F2) over its own range, from CurvePoints; null when that sub-function has no data.
+    public static (double[] X, double[] Y)? OtherCurve(Fdf f, int sub)
+    {
+        int o = 1 - sub;
+        var s = f.Subs[o];
+        var v = s.Values.Select(DeckLine.ParseNum).ToList();
+        if (s.Type == 0 || v.Count == 0) return null;
+        return CurvePoints(s.Type, v, o == 0 ? f.D(0) : Math.Abs(f.D(1)), Math.Abs(f.D(o + 1)));
     }
 
     /// Delete the selected functions with their data (E3/E4b, E6d, E7d).
@@ -476,12 +509,7 @@ public static class Functions
         if (at != null) { var ls = LinesOf(d, k, at); pos = d.Lines.IndexOf(before ? ls[0] : ls[^1]) + (before ? 0 : 1); }
         else
         {
-            var heads = Heads(d, k);
-            var end = heads.Count > 0 ? LinesOf(d, k, heads[^1])[^1] : null;
-            pos = end != null ? d.Lines.IndexOf(end) + 1
-                : k == Kind.Fdf ? (FdfEnd(d) is { } e ? d.Lines.IndexOf(e) : -1)
-                : k == Kind.Joint ? (JointEnd(d) is { } je ? d.Lines.IndexOf(je) : -1)
-                : WindAnchor(d);
+            pos = End(d, k);
             // ponytail: pasting into a deck with no E.7 section adds nothing (3I's writer drops E.7 unless a joint uses
             // functions, FileManager.cs:1646) — build the section when a client pastes into an empty Joint list.
             if (pos < 0) return 0;

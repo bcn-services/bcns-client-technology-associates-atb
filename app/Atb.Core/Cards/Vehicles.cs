@@ -119,6 +119,96 @@ public static class Vehicles
     public static string? EditCell(Deck d, Block b, int row, int col, string text) =>
         Cell(b, row, col) is { } c ? d.Edit(c.Line, c.Token, text) : "Time is computed from Start Time and Interval";
 
+    // ---- list operations (Vehicle.cs btnInsert / btnCopy / btnDelete / btnReplace, Vehicle_Closing) ----
+
+    public const string InsertText = "You are about to insert a prescribed motion.  ATB 3I will\r\ncascade update other input cards for segment numbering.\r\nYou can't undo this operation once it proceeds.  Continue?";
+    public const string InsertTitle = "Insert Prescribed Motion";
+    public const string DeleteText = "You are about to delete a prescribed motion.  ATB 3I will\r\ncascade update other input cards for segment numbering.\r\nYou can't undo this operation once it proceeds. Continue?";
+    public const string DeleteTitle = "Delete Prescribed Motion";
+    public const string ReplaceText = "You are about to replace the selected prescribed motion with a copied prescribed motion.\r\nYou can't undo this operation once it proceeds. Continue?";
+    public const string ReplaceTitle = "Replace Vehicle";
+    public const string PrimaryText = "You can't delete the primary vehicle.";
+
+    /// btnInsert (Vehicle.cs:557-631): a new vehicle titled "Inserted Motion" before vehicle n, taking its segment number;
+    /// Renumber shifts every reference to that segment and later ones.
+    // ponytail: 3I's other C1C2a columns take the database defaults; this writes zeros (a half sine) — upgrade when the
+    // ATB3iData.mdb column defaults are read.
+    public static void Insert(Deck d, int n)
+    {
+        var data = new EntityData();
+        data.Groups.Add([new DeckLine(["\"Inserted Motion\""], Labeler.LabelFor("C.1")), new DeckLine(Enumerable.Repeat("0", 14), Labeler.LabelFor("C.2.A"))]);
+        Renumber.Insert(d, Entity.Vehicle, n, data);
+    }
+
+    /// btnCopy: vehicle n's C.1-C.5 lines, for Replace.
+    public static List<DeckLine> Copy(Deck d, int n) => Renumber.Copy(d, Entity.Vehicle, n).Groups[0];
+
+    /// btnDelete (Vehicle.cs:374-479): the primary (last) vehicle is refused with 3I's text; any other goes through
+    /// Renumber.Delete, which cascades and shifts every reference. Null = deleted.
+    public static string? Delete(Deck d, int n)
+    {
+        if (n == Renumber.Count(d, Entity.Vehicle)) return PrimaryText;
+        Renumber.Delete(d, Entity.Vehicle, n, _ => true);   // 3I asks once (DeleteText) before, not per reference
+        return null;
+    }
+
+    /// btnReplace (Vehicle.cs:633-748): vehicle n's block becomes a copy of `copy`, keeping its own Vehicle Segment
+    /// (0 for the primary). The vehicle count is unchanged, so no reference moves (3I runs no UpdateSegID here).
+    public static void Replace(Deck d, int n, IReadOnlyList<DeckLine> copy)
+    {
+        var old = Renumber.Owned(d, Entity.Vehicle, n)[0];
+        var fresh = copy.Select(l => new DeckLine(l.Tokens, l.Label)).ToList();
+        var oldC2a = old.First(l => l.Is("C.2.A"));
+        if (fresh.FirstOrDefault(l => l.Is("C.2.A")) is { Count: 14 } c2a && oldC2a.Count == 14) c2a.Set(13, oldC2a.Tokens[13]);
+        int at = d.Lines.IndexOf(old[0]);
+        d.Lines.RemoveRange(at, old.Count);
+        d.Lines.InsertRange(at, fresh);
+    }
+
+    /// Vehicle_Closing (Vehicle.cs:750-796): the list's Vehicle Title is C.1 token 0.
+    public static string? SetTitle(Deck d, Block b, string text) => d.Edit(b.C1, 0, text);
+
+    // ---- sub-editor grid rows (VehOpt2 / VehOpt34 AllowAddNew / AllowDelete, their OK's count rewrite) ----
+
+    /// Add a zero row at the end of the Motion Data grid.
+    public static void AddRow(Deck d, Block b)
+    {
+        if (b.Type == 0) return;
+        if (b.Type == 1) { SetC3(d, b, [.. b.Data.SelectMany(l => l.Tokens), "0"]); return; }
+        var rows = b.DataRows;
+        int width = rows.Count > 0 ? rows[^1].Count : b.Type == 2 ? 6 : 7;
+        var last = b.Data.Count > 0 ? b.Data[^1] : b.C2b!;
+        d.Lines.Insert(d.Lines.IndexOf(last) + 1, new DeckLine(Enumerable.Repeat("0", width), Labeler.LabelFor(b.Type == 2 ? "C.4" : "C.5")));
+        SetRowCount(b, rows.Count + 1);
+    }
+
+    /// Delete grid row `row`.
+    public static void DeleteRow(Deck d, Block b, int row)
+    {
+        if (row < 0 || row >= RowCount(b)) return;
+        if (b.Type == 1) { var v = b.Data.SelectMany(l => l.Tokens).ToList(); v.RemoveAt(row); SetC3(d, b, v); return; }
+        d.Lines.Remove(b.DataRows[row]);
+        SetRowCount(b, b.DataRows.Count - 1);
+    }
+
+    /// C.3 values rewritten 12 a line (unlabelled, as the decks and 3I's writer have them); Interpolated Points = count.
+    static void SetC3(Deck d, Block b, List<string> values)
+    {
+        foreach (var l in b.Data) d.Lines.Remove(l);
+        d.Lines.InsertRange(d.Lines.IndexOf(b.C2a) + 1, values.Chunk(12).Select(c => new DeckLine(c, "")));
+        SetRowCount(b, values.Count);
+    }
+
+    /// 3I's OK: VehOpt2.cs:1612 Interpolated Points = rows; VehOpt34.cs:2392 6-DOF Interpolated Points = -rows,
+    /// :2396-2409 spline Number of Data Points (C.2.B token 2) = rows.
+    static void SetRowCount(Block b, int rows)
+    {
+        string n = rows.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (b.Type == 1) b.C2a.Set(8, n);
+        else if (b.Type == 2) b.C2a.Set(8, "-" + n);
+        else b.C2b!.Set(2, n);
+    }
+
     /// The one source of the Data Plot's points (VehOpt2.btnPlot :1659-1666, VehOpt34.btnPlot :2461-2468):
     /// X = the Time column, Y = column col, one point per row.
     public static (float[] X, float[] Y) PlotPoints(Block b, int col)
