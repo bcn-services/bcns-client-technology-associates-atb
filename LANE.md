@@ -140,7 +140,7 @@ Context: `docs/HANDOFF-PLAN.md` (sessions, decisions), `docs/TIER2-SCOPE.md` (sc
     - Editing a time-history row updates the C.3/C.4/C.5 card and nothing else, and the plot's points come from one `Atb.Core` function (unit tests)
     - A robot scenario opens every sub-editor on a client deck, edits one row, saves, and screenshots the plot, in a green `app-e2e.yml` run
   caution: true
-  status: not started
+  status: done
 
 - task: Function editors (§2 #17, #18, #19) — Force Deflection (constant / polynomial / tabular), Wind Force time
     history, Joint Stiffness, with the painted curve plot, copying `FDFData.cs`, `JntFData.cs`, `Plots.cs`

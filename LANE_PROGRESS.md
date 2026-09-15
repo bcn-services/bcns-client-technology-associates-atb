@@ -5,7 +5,7 @@ LANE.md is the contract; this tracks where we are in it — if they disagree, LA
 ## Current position
 
 - **Status:** Round 2 (v1: every ATB 3I screen plus the installer), session S1 done: GEBOD Replace, the segment/joint warning, Body Summary and the Maximum Value List are built. macOS tests pass (1195); the full Windows robot run 34917011692 passed 34 of 34 scenarios; the lane acceptance review (`.claude/dev-team/lane-acceptance-report-r2-s1.md`) accepted S1.
-- **Next:** S2 — Vehicle Motion list and sub-editors, then the function editors (`docs/HANDOFF-PLAN.md`). Carry forward the review's Minor fixes: a copied body must line up with body boundaries before it pastes; the robot's 10 s late-dialog wait; mixed line endings in the delete warning; the robot never answers Yes on Insert/Replace Copied Body; STANDARDS' copied-refs line should name Replace with Copied Body too.
+- **Next:** S2 — Vehicle Motion done (Windows run 34920934490); next the function editors (`docs/HANDOFF-PLAN.md`). Carry forward the review's Minor fixes: a copied body must line up with body boundaries before it pastes; the robot's 10 s late-dialog wait; mixed line endings in the delete warning; the robot never answers Yes on Insert/Replace Copied Body; STANDARDS' copied-refs line should name Replace with Copied Body too.
 - **Blockers:** none. Decisions for Nate: Body Summary's delete check used 2495_2 because 2638 has only one body; the Maximum Value List shows Value and Name and is read-only (3I shows FileID and lets you edit and save); the segment delete warning drops "Delete it anyway?" in favour of 3I's single cascade question; GEBOD Replace of body 1 in a multi-body deck keeps the next body's root joint where 3I drops it; the Body Summary buttons follow 3I's on-screen order, copied bodies' references point at the copy, and a copied body's surplus joints become -1 before removal.
 - **Last updated:** 2026-09-14
 
@@ -17,7 +17,7 @@ LANE.md is the contract; this tracks where we are in it — if they disagree, LA
 | Segment and joint insert/delete warning | done (2026-09-14) — Adding, pasting or deleting segments and joints now asks ATB 3I's cascade question first; No leaves the deck untouched, and a segment is inserted on its own as in ATB 3I. |
 | Body Summary screen | done (2026-09-14) — Model > Body Summary lists the deck's bodies with ATB 3I's buttons to copy, insert, replace or delete a whole body (or build one with GEBOD), and every card that points at the moved segments and joints follows. |
 | Maximum Value List screen | done (2026-09-14) — File > Setting opens ATB 3I's Maximum Value List, showing the solver's 21 limits in 3I's order; it is read-only, where 3I let you edit and save them. |
-| Vehicle Motion list and sub-editors | skipped — below stop marker |
+| Vehicle Motion list and sub-editors | done (2026-09-14) — Model > Vehicle Motion lists the deck's vehicles and opens each in ATB 3I's half-sine, deceleration, 6-DOF or spline editor with its data plot; editing a row changes only that deck line. Insert/Copy/Delete/Replace Vehicle and adding or deleting grid rows are not built yet (disabled). |
 | Function editors | skipped — below stop marker |
 | Run Control form | skipped — below stop marker |
 | Output Control Parameters | skipped — below stop marker |
@@ -76,7 +76,7 @@ Lane acceptance (`.claude/dev-team/lane-acceptance-report-r1b.md`): open → edi
 | ID renumbering | done — Inserting or deleting a segment, joint, plane, or vehicle now renumbers every card that points to it and updates the counts, and deleting something still in use asks first and lists what uses it. |
 | GEBOD body generator | done — Tools > GEBOD opens a copy of ATB 3I's body generator form and runs the original GEBOD program behind it; the body it makes holds only the body cards, so turning it into a full runnable deck still needs a step Nate has to specify, and it still needs a first try on Windows. |
 | Body Summary screen | skipped — below stop marker |
-| Vehicle Motion list and sub-editors | skipped — below stop marker |
+| Vehicle Motion list and sub-editors | done (2026-09-14) — Model > Vehicle Motion lists the deck's vehicles and opens each in ATB 3I's half-sine, deceleration, 6-DOF or spline editor with its data plot; editing a row changes only that deck line. Insert/Copy/Delete/Replace Vehicle and adding or deleting grid rows are not built yet (disabled). |
 | Function editors | skipped — below stop marker |
 | HIC/CSI, Run Control, Output Control screens | skipped — below stop marker |
 | Installer | skipped — below stop marker |
