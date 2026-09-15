@@ -327,6 +327,31 @@ public class Scenarios
         Assert.Equal(before, File.ReadAllText(copy));
     }
 
+    /// File > Setting: ATB 3I's Maximum Value List (MainMenu.cs:4296-4317), rows from the Setting table in ID order;
+    /// read-only (typing into a cell changes nothing, no Save button), Cancel closes it, the deck stays unchanged.
+    [Fact]
+    public void MaxValueList()
+    {
+        var copy = Robot.TempCopy("cases/2479/2479_2.LIN", "max-value-list");
+        var before = File.ReadAllText(copy);
+        using var r = new Robot("max-value-list", copy);
+        r.Menu("File", "Setting");
+        var f = BodyWin(r, "ATB 3I Maximum Value List");
+        r.Shot("max-value-list");
+        Assert.Equal(("Max Segment", "80"), (Robot.Value(BodyCell(r, f, "Name Row 0")), Robot.Value(BodyCell(r, f, "Value Row 0"))));
+        Assert.Equal(("Balance Accel", "1"), (Robot.Value(BodyCell(r, f, "Name Row 20")), Robot.Value(BodyCell(r, f, "Value Row 20"))));
+        r.Click(BodyCell(r, f, "Value Row 0"));
+        FlaUI.Core.Input.Keyboard.Type("9");
+        Robot.Press(VirtualKeyShort.RETURN);
+        Assert.Equal("80", Robot.Value(BodyCell(r, f, "Value Row 0")));
+        Assert.Null(f.FindFirstDescendant(r.A.ConditionFactory.ByControlType(ControlType.Button).And(r.A.ConditionFactory.ByName("Save"))));
+        r.Click(r.Button(f, "Cancel"));
+        Robot.UntilTrue(() => FindWin(r, "ATB 3I Maximum Value List") == null, 10, "Maximum Value List closed");
+        r.Shot("closed");
+        Assert.Empty(r.Unexpected());
+        Assert.Equal(before, File.ReadAllText(copy));
+    }
+
     /// Body Summary on 2495_2: select body 2, Delete Body, Yes on Body.cs:756, Save & Exit, Save, Run to completion.
     /// (Done-when 1 names 2638_Start_135_, which has one body; 2495_2 is the client deck with a second body.)
     [Fact]

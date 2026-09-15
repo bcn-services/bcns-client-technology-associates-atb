@@ -36,6 +36,9 @@ public sealed class MainForm : Form
         file.DropDownItems.Add("Con&vert .ain to .lin...", null, async (_, _) => await ConvertAin());
         file.DropDownItems.Add("Choose &solver executable...", null, (_, _) => solverExe = PickSolver());
         file.DropDownItems.Add(new ToolStripSeparator());
+        // ATB 3I MainMenu.cs:2655-2659: File > Setting, between separators before Exit; non-modal as 3I's Show() (:4315).
+        file.DropDownItems.Add("Setting", null, (_, _) => new MaxValueForm().Show(this));
+        file.DropDownItems.Add(new ToolStripSeparator());
         file.DropDownItems.Add("E&xit", null, (_, _) => Close());
         // Ctrl+Shift so plain Ctrl+C/V keep working inside a cell being edited.
         var edit = new ToolStripMenuItem("&Edit");
