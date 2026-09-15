@@ -113,7 +113,7 @@ Context: `docs/HANDOFF-PLAN.md` (sessions, decisions), `docs/TIER2-SCOPE.md` (sc
     - Replacing a body with a copied body of a different size keeps references by position and drops or shifts the rest, through the same function the GEBOD Replace uses (unit test; removing the shared call makes it fail)
     - A robot scenario opens Body Summary on a client deck and screenshots the form and each button's dialog, in a green `app-e2e.yml` run (URL in the item report)
   caution: true
-  status: not started
+  status: done
 
 - task: Maximum Value List screen (§2 #38) — the read-only grid 3I opens from `mnuSetting` (`MainMenu.cs:2561`),
     same menu place, title, columns and row order, showing the solver limits from the `Setting` table
