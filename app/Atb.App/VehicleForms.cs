@@ -286,7 +286,7 @@ public sealed class VehOpt34Form : VehEditor
             Field(g, "Number of Spline Fit  Points", 8, 120, 176, c, 8, negate: true);
             g.Controls.Add(new Label { Text = "Spline Degree", Location = new Point(8, 151), Size = new Size(176, 16) });
             var deg = new ComboBox { Location = new Point(184, 148), Size = new Size(64, 22), DropDownStyle = ComboBoxStyle.DropDownList, AccessibleName = "Spline Degree" };
-            deg.Items.AddRange(Enumerable.Range(0, 4).Where(n => n >= t - 2).Select(n => (object)n.ToString()).ToArray());   // type 3 drops 0,1; type 4 drops 0
+            deg.Items.AddRange(Vehicles.SplineDegrees(t).Select(n => (object)n.ToString()).ToArray());
             deg.SelectedItem = B.C2b!.Int(1).ToString();
             deg.SelectedIndexChanged += (_, _) => Deck.Edit(B.C2b!, 1, (string)deg.SelectedItem!);
             g.Controls.Add(deg);
@@ -324,7 +324,7 @@ public sealed class VehOpt34Form : VehEditor
     void Box(Control g, string title, int x, int y, DeckLine line, int tok, params string[] labels)
     {
         var box = Group(g, title, x, y, 296, 64);
-        for (int k = 0; k < labels.Length; k++) Field(box, labels[k], 8 + k * 96, 28, 36, line, tok + k);
+        for (int k = 0; k < labels.Length; k++) Field(box, labels[k], 8 + k * 96, 28, 36, line, tok + k).Width = 52;
     }
 }
 

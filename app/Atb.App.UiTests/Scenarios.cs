@@ -420,6 +420,7 @@ public class Scenarios
         r.Click(r.Button(list, "Edit Vehicle"));
         var ed = BodyWin(r, Vehicles.Title(type));
         r.Shot("editor-" + Vehicles.Editor(type));
+        if (type >= 3) Assert.Equal(v.C2b!.Str(1), Robot.ComboText(r.Named(ed, ControlType.ComboBox, "Spline Degree")));
         if (type == 0) { r.Type(ed, "Time Duration", nv); r.Shot("edited"); }
         else
         {

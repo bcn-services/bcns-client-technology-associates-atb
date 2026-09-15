@@ -77,6 +77,9 @@ public static class Vehicles
     // ordinal — upgrade when a deck is found whose 3I import numbers its vehicles otherwise.
     public static int SegId(Deck d, Block b) => b.C2a.Int(13) != 0 ? b.C2a.Int(13) : d.SegmentCount + b.Id;
 
+    /// Spline Degree items (VehOpt34_Load: items 0-3; type 3 removes 0 and 1, type 4 removes 0).
+    public static int[] SplineDegrees(int type) => type is >= 3 and <= 5 ? Enumerable.Range(5 - type, type - 1).ToArray() : [];
+
     /// Grid column captions of the "Motion  Data" tab (3I tables C3 / C4 / C5b with their unbound Time column).
     public static string[] Columns(int type) => type switch
     {

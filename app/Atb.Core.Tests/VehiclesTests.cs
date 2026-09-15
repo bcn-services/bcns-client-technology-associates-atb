@@ -22,6 +22,19 @@ public class VehiclesTests
     [InlineData(0, "VehOpt1")] [InlineData(1, "VehOpt2")] [InlineData(2, "VehOpt34")] [InlineData(3, "VehOpt34")] [InlineData(4, "VehOpt34")] [InlineData(5, "VehOpt34")]
     public void EditorPerType(int type, string form) => Assert.Equal(form, Vehicles.Editor(type));
 
+    [Fact]
+    public void SplineDegreeItemsPerType()
+    {
+        Assert.Equal([2, 3], Vehicles.SplineDegrees(3));
+        Assert.Equal([1, 2, 3], Vehicles.SplineDegrees(4));
+        Assert.Equal([0, 1, 2, 3], Vehicles.SplineDegrees(5));
+        Assert.Empty(Vehicles.SplineDegrees(2));
+        // every client deck's C.2.B degree is one of its type's items (else the combo shows blank)
+        foreach (var p in Fixtures.ClientDecks())
+            foreach (var b in Vehicles.Blocks(Deck.Load(p)).Where(v => v.Type >= 3))
+                Assert.Contains(b.C2b!.Int(1), Vehicles.SplineDegrees(b.Type));
+    }
+
     /// Every client deck: each vehicle's type is the rule applied to its own C.2.A token 8 and C.2.B token 0, the walk
     /// ends at the primary vehicle (Vehicle Segment 0), and the block's data lines are the next lines, just before D.1.A.
     [Fact]
