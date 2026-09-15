@@ -192,7 +192,7 @@ Context: `docs/HANDOFF-PLAN.md` (sessions, decisions), `docs/TIER2-SCOPE.md` (sc
     - A robot scenario on temp copies of client decks adds a first wind and a first joint function, inserts, copies, deletes and replaces a vehicle, adds and deletes a grid row, edits a vehicle Title and saves, screenshotting each step plus the two-series FDF plot, the Editing Function list showing F1 and F2, the wind segment dropdown and the 6-DOF editor's "Speed" label, in a green `app-e2e.yml` run (URL in the item report)
     - Existing passing tests remain passing
   caution: true
-  status: blocked (d5556ff, time stop) — robot run with the fix-pass screenshots (two-series FDF, Copy Vehicle, wind SegID dropdown) not yet green; delta QA/review over 3618cf2..d5556ff not run; TrimRows and the token-13 SegID post-step not mutation-checked
+  status: blocked (d5556ff, time stop) — robot run with the fix-pass screenshots (two-series FDF, Copy Vehicle, wind SegID dropdown) not yet green (Windows run 35024899124: S2ParityGridsAndFunctions fails "SegID list dropped: not after 10s"); delta QA/review over 3618cf2..d5556ff not run; TrimRows and the token-13 SegID post-step not mutation-checked
 
 ### S3 — Run Control, Output Control, HIC/CSI
 
