@@ -76,7 +76,7 @@ Lane acceptance (`.claude/dev-team/lane-acceptance-report-r1b.md`): open → edi
 | ID renumbering | done — Inserting or deleting a segment, joint, plane, or vehicle now renumbers every card that points to it and updates the counts, and deleting something still in use asks first and lists what uses it. |
 | GEBOD body generator | done — Tools > GEBOD opens a copy of ATB 3I's body generator form and runs the original GEBOD program behind it; the body it makes holds only the body cards, so turning it into a full runnable deck still needs a step Nate has to specify, and it still needs a first try on Windows. |
 | Body Summary screen | skipped — below stop marker |
-| Vehicle Motion list and sub-editors | done (2026-09-14) — Model > Vehicle Motion lists the deck's vehicles and opens each in ATB 3I's half-sine, deceleration, 6-DOF or spline editor with its data plot; editing a row changes only that deck line. Insert/Copy/Delete/Replace Vehicle and adding or deleting grid rows are not built yet (disabled). |
+| Vehicle Motion list and sub-editors | skipped — below stop marker |
 | Function editors | skipped — below stop marker |
 | HIC/CSI, Run Control, Output Control screens | skipped — below stop marker |
 | Installer | skipped — below stop marker |
