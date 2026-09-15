@@ -247,6 +247,8 @@ public sealed class Robot : IDisposable
         var end = Until(() => Dialog("ATB run") ?? Dialog("ATB Run")
             ?? (File.Exists(dest + ".aou") && !Windows().Any(w => w.Name.StartsWith("ATB run: ", StringComparison.Ordinal)) ? Main : null),
             1800, "solver run to finish");
+        // The .aou can exist and the progress window close just before the app's end-of-run box appears: give it a moment.
+        if (end == Main && Poll(() => Dialog("ATB run") != null || Dialog("ATB Run") != null, 10)) end = Dialog("ATB run") ?? Dialog("ATB Run") ?? Main;
         Shot("run-finished");
         if (end.Name == "ATB Run") throw new Xunit.Sdk.XunitException("app reported a failed run: " + DialogText(end));
         if (end.Name == "ATB run") Click(Button(end, "No"));

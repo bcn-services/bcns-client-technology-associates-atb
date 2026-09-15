@@ -22,10 +22,12 @@ public sealed class BodyForm : Form
     /// Set by the GEBOD buttons: the form closes and MainForm opens the GEBOD form at this placement (as 3I does).
     public GebodPlacement? Gebod { get; private set; }
 
-    readonly TextBox title = new() { Dock = DockStyle.Top, AccessibleName = "General Description" };
+    // 3I's layout (Body.cs InitializeComponent): label (8,8), title (136,8) 150x20, grid (3,40) 290x240,
+    // buttons 192x24 at x 296, y 8 / 48 / 88 / 128 / 168 / 208 / 248, client 496x278.
+    readonly TextBox title = new() { Location = new Point(136, 8), Size = new Size(150, 20), AccessibleName = "General Description" };
     readonly DataGridView grid = new()
     {
-        Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows = false, MultiSelect = false,
+        Location = new Point(3, 40), Size = new Size(290, 236), ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows = false, MultiSelect = false,
         SelectionMode = DataGridViewSelectionMode.FullRowSelect, RowHeadersVisible = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
     };
     readonly List<Button> needBody = [];
@@ -36,29 +38,24 @@ public sealed class BodyForm : Form
         Text = "Body Editing Form"; ClientSize = new Size(496, 278); FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = MinimizeBox = false; StartPosition = FormStartPosition.CenterParent;
         foreach (var h in new[] { "BodyID", "Number of Seg", "Number of Jnt" }) grid.Columns.Add(h, h);
-        var left = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8) };
-        left.Controls.Add(grid);
-        left.Controls.Add(title);
-        left.Controls.Add(new Label { Text = "General Description", Dock = DockStyle.Top, ForeColor = Color.Green, Font = new Font(Font, FontStyle.Bold) });
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Right, Width = 230, FlowDirection = FlowDirection.TopDown, Padding = new Padding(4, 4, 8, 4) };
-        // 3I's layout, top to bottom (Body.cs button Location.Y 8..248).
-        Btn(buttons, "Copy Body", CopyBody, true);
-        Btn(buttons, "Add/Insert Copied Body", AddCopied, false);
-        Btn(buttons, "Replace Body with Copied Body", ReplaceCopied, true);
-        Btn(buttons, "Add/Insert Body Using GEBOD", GebodAdd, false);
-        Btn(buttons, "Replace Body Using GEBOD", GebodReplace, true);
-        Btn(buttons, "Delete Body", DeleteBody, true);
-        Btn(buttons, "Save && Exit", SaveExit, false);
-        Controls.Add(left); Controls.Add(buttons);
+        Controls.Add(new Label { Text = "General Description", Location = new Point(8, 8), Size = new Size(128, 16), ForeColor = Color.Green, Font = new Font(Font, FontStyle.Bold) });
+        Controls.Add(title); Controls.Add(grid);
+        Btn(8, "Copy Body", CopyBody, true);
+        Btn(48, "Add/Insert Copied Body", AddCopied, false);
+        Btn(88, "Replace Body with Copied Body", ReplaceCopied, true);
+        Btn(128, "Add/Insert Body Using GEBOD", GebodAdd, false);
+        Btn(168, "Replace Body Using GEBOD", GebodReplace, true);
+        Btn(208, "Delete Body", DeleteBody, true);
+        Btn(248, "Save && Exit", SaveExit, false);
         title.Text = Deck.Card("B.1") is { Count: 4 } b1 ? b1.Str(2) : "";
         Fill();
     }
 
-    void Btn(Control parent, string text, Action act, bool needsBody)
+    void Btn(int y, string text, Action act, bool needsBody)
     {
-        var b = new Button { Text = text, Width = 210, Height = 34 };
+        var b = new Button { Text = text, Location = new Point(296, y), Size = new Size(192, 24) };
         b.Click += (_, _) => act();
-        parent.Controls.Add(b);
+        Controls.Add(b);
         if (needsBody) needBody.Add(b);
     }
 

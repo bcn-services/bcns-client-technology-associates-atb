@@ -278,7 +278,8 @@ public class Scenarios
         catch (TimeoutException)
         {
             r.Shot("no-cell");
-            r.Log("Body form elements: " + string.Join(" | ", form.FindAllDescendants().Take(80).Select(e => $"{e.ControlType}:{e.Name}")));
+            r.Log("Body form elements: " + string.Join(" | ", form.FindAllDescendants().Take(80)
+                .Select(e => $"{e.Properties.ClassName.ValueOrDefault}:{e.Properties.Name.ValueOrDefault}")));
             throw;
         }
     }
