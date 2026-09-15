@@ -153,7 +153,46 @@ Context: `docs/HANDOFF-PLAN.md` (sessions, decisions), `docs/TIER2-SCOPE.md` (sc
     - A robot scenario opens each editor on a client deck and screenshots the plot, in a green `app-e2e.yml` run
   status: done (a4b7870, Windows run 34924273082)
 
-> **⚠️ AUTONOMOUS RUN — STOP HERE**
+### S2 parity fixes
+
+- task: S2 parity fixes — close the S2 gaps against ATB 3I that `LANE_PROGRESS.md` "Next" lists (detail in
+    `.claude/dev-team/lane-acceptance-report-r2-s2.md`, Critical 1 and Important 2–7), on the Vehicle Motion and
+    function screens (`VehicleForms.cs`, `FunctionForms.cs`, `DataPlotForm.cs`, `Atb.Core/Cards/Vehicles.cs`,
+    `Functions.cs`):
+    (a) an empty function list creates its first function, as 3I's add-new row does on zero rows (`GenList.cs:690`,
+    `ATBGrid.cs:2788-2818`: new ID GridFindMin-1; a joint gets NTheta 2, NPhi 1, Type 1) — Insert with no selection
+    appends a blank function, creating the E.6/E.7 section and its terminator when absent; correct `STANDARDS.md`'s
+    "use Insert first" line;
+    (b) the "Editing Function" listbox shows both Function F1 and Function F2, with 3I's Arial 8.25 bold Navy and
+    ItemHeight 14 (`GenList.cs:492-505`);
+    (c) Vehicle Motion's Insert, Copy, Delete and Replace Vehicle, as C.1–C.5 block operations over `Renumber`, with
+    3I's confirmations (`Vehicle.cs:557-631`, `:349-372`, `:374-479`, `:633-748`), "You can't delete the primary
+    vehicle.", and Delete disabled when only one vehicle exists (`:893`); plus add/delete rows in the sub-editor
+    grids, rewriting C.2.A token 8 and C.2.B token 2 from the row count as 3I's OK does (`VehOpt2.cs:1604-1647`,
+    `VehOpt34.cs:2379-2443`); drop the two `STANDARDS.md` lines that record these as disabled;
+    (d) the force-deflection plot draws 3I's second series — the other sub-function's saved curve in colour index 4,
+    one series only when the other has no data (`FDFData.cs:675-708`); `DataPlotForm` takes a list of series;
+    (e) the wind Velocity SegID and Reference SegID columns are dropdowns of the deck's segments
+    (`MainMenu.cs:4509-4513`);
+    (f) non-numeric input in the joint list (FunctionID, NTheta, NPhi, Type) and wind list (FunctionID, Specific
+    Heats) shows "Input string was not in correct format!", titled "ATB 3I", Error icon (`ATBGrid.cs:2523-2528`,
+    `:2728-2733`);
+    (g) Vehicle Title is editable in the Vehicle Motion list and writes C.1 token 0 through `Deck.Edit`
+    (`Vehicle.cs:750-796`);
+    (h) the 6-DOF editor's "Speed" label shows in full, not cut to "Spee".
+  guardrails:
+    - The forms have no renumbering of their own; every vehicle or segment reference shift goes through `Renumber`
+    - Editing a cell or a title still rewrites only that deck line, and an unedited save still changes zero bytes
+    - Sub-editor layout, fonts and colours beyond (b) and (h) are not in this item
+    - The existing S2 robot scenarios' assertions are not loosened
+  done when:
+    - On a copy of `cases/2479/2479_2.LIN` (no E.6/E.7), adding the first wind function and the first joint function through `Atb.Core` yields 3I's defaults and a deck that validates (unit test with literal expected lines)
+    - Inserting, copying, deleting and replacing a vehicle on a client deck renumbers every vehicle-segment reference through `Renumber` and the deck validates; deleting the primary vehicle is refused with 3I's text; adding and deleting a sub-editor grid row rewrites C.2.A token 8 / C.2.B token 2 to the new row count (unit tests with literal expected lines; mutation checks recorded in the item report)
+    - The FDF plot's second series comes from the other sub-function's `Functions.CurvePoints` and is absent when that sub-function has no data, and the non-numeric message text and title are `Atb.Core` constants equal to 3I's strings (unit tests)
+    - A robot scenario on temp copies of client decks adds a first wind and a first joint function, inserts, copies, deletes and replaces a vehicle, adds and deletes a grid row, edits a vehicle Title and saves, screenshotting each step plus the two-series FDF plot, the Editing Function list showing F1 and F2, the wind segment dropdown and the 6-DOF editor's "Speed" label, in a green `app-e2e.yml` run (URL in the item report)
+    - Existing passing tests remain passing
+  caution: true
+  status: not started
 
 ### S3 — Run Control, Output Control, HIC/CSI
 
@@ -183,6 +222,8 @@ Context: `docs/HANDOFF-PLAN.md` (sessions, decisions), `docs/TIER2-SCOPE.md` (sc
     - The screen opens on every client deck that enables it and saving unedited changes zero bytes (unit test)
     - A robot scenario opens the screen and screenshots it
   status: not started
+
+> **⚠️ AUTONOMOUS RUN — STOP HERE**
 
 ### S4 — Weight Balancing
 

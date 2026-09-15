@@ -19,9 +19,10 @@ LANE.md is the contract; this tracks where we are in it — if they disagree, LA
 | Maximum Value List screen | done (2026-09-14) — File > Setting opens ATB 3I's Maximum Value List, showing the solver's 21 limits in 3I's order; it is read-only, where 3I let you edit and save them. |
 | Vehicle Motion list and sub-editors | done (2026-09-14) — Model > Vehicle Motion lists the deck's vehicles and opens each in ATB 3I's half-sine, deceleration, 6-DOF or spline editor with its data plot; editing a row changes only that deck line. Insert/Copy/Delete/Replace Vehicle and adding or deleting grid rows are not built yet (disabled). |
 | Function editors | done (2026-09-14) — Model > Function > General FDF, Joint Stiffness and Wind Force open ATB 3I's editors (force-deflection as constant, polynomial or tabular) with a Data Plot drawn from the solver's own function math; saving an unedited function changes no bytes. Wind functions have no plot (3I has none), and no client deck has wind or joint functions, so those were tested on decks built from 2479_2. |
-| Run Control form | skipped — below stop marker |
-| Output Control Parameters | skipped — below stop marker |
-| HIC and CSI Definition | skipped — below stop marker |
+| S2 parity fixes | not started |
+| Run Control form | not started |
+| Output Control Parameters | not started |
+| HIC and CSI Definition | not started |
 | Weight Balancing probe | skipped — below stop marker |
 | Weight Balancing screens | skipped — below stop marker |
 | Installer | skipped — below stop marker |
