@@ -111,6 +111,19 @@ public static class Renumber
         return data;
     }
 
+    /// Point the segment (and ellipsoid) references inside copied lines through map. A copy is not in the deck, so
+    /// Insert and Delete never shift it: the caller placing a copy says where each number lands. Sign kept; 0 is no ref.
+    public static void Remap(IEnumerable<EntityData> datas, Func<int, int> map)
+    {
+        foreach (var l in datas.SelectMany(x => x.Groups).SelectMany(g => g))
+        {
+            var t = l.Tokens.ToList();
+            foreach (var i in Marked(l, Kinds(Entity.Segment)))
+                if (Num(t[i]) is int v && Ref(l, i, t[i]) is int a && a > 0) t[i] = Str(Math.Sign(v) * map(a));
+            l.SetTokens(t);
+        }
+    }
+
     /// ATB 3I TableForm.cs:412-440: asked once when grid rows of segments (B2B6M) / joints (B3B4B5M) are inserted or deleted.
     public const string SegmentCascadeText = "You have inserted/deleted segments and this requires CASCADE UPDATE/DELETE\r\nother input cards referring these segments.  Continue?";
     public const string SegmentCascadeTitle = "Cascade Update of Segment ID Number";

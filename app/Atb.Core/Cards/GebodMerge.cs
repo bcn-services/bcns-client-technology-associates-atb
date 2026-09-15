@@ -71,16 +71,25 @@ public static class GebodMerge
     /// positions' own lines (B.2, B.6, G.3.a; B.3-B.5) are swapped for GEBOD's. The body count does not change (no G.2).
     static Deck Replace(Deck d, int k, List<Seg> segs, List<Jnt> jnts, Func<IReadOnlyList<RefSite>, bool> confirm)
     {
+        int a = BodyRange(d, k).A;
+        return ReplaceBody(d, k, segs.Select(SegData).ToList(), jnts.Select(x => JointData(x, a - 1)).ToList(), confirm);
+    }
+
+    /// The by-position replace shared by GEBOD Replace and Body Summary's "Replace Body with Copied Body": body k's
+    /// segments become segs and its joints become joints (the new body's own joints, Seg JNT already final; its NULL
+    /// joint is kept when k > 1). Works on d in place.
+    internal static Deck ReplaceBody(Deck d, int k, List<EntityData> segs, List<EntityData> joints, Func<IReadOnlyList<RefSite>, bool> confirm)
+    {
         var (a, so, j, jo) = BodyRange(d, k);
         int sn = segs.Count, jn = a > 1 ? sn : sn - 1;
         var sites = ReplacedReferences(d, k, sn);
         if (sites.Count > 0 && !confirm(sites)) throw new OperationCanceledException("Replace declined; the deck is unchanged.");
-        var newJ = (a > 1 ? [NullJoint()] : new List<EntityData>()).Concat(jnts.Select(x => JointData(x, a - 1))).ToList();
+        var newJ = (a > 1 ? [NullJoint()] : new List<EntityData>()).Concat(joints).ToList();
         for (int s = a + so - 1; s >= a + sn; s--) Renumber.Delete(d, Entity.Segment, s, _ => true);   // confirmed above, as one list
         for (int x = j + jo - 1; x >= j + jn; x--) Renumber.Delete(d, Entity.Joint, x, _ => true);
-        for (int i = so; i < sn; i++) Renumber.Insert(d, Entity.Segment, a + i, SegData(segs[i]));
+        for (int i = so; i < sn; i++) Renumber.Insert(d, Entity.Segment, a + i, segs[i]);
         for (int i = jo; i < jn; i++) Renumber.Insert(d, Entity.Joint, j + i, newJ[i]);           // Seg JNT final: no segment moves after this
-        for (int i = 0; i < Math.Min(so, sn); i++) Swap(d, Entity.Segment, a + i, SegData(segs[i]));
+        for (int i = 0; i < Math.Min(so, sn); i++) Swap(d, Entity.Segment, a + i, segs[i]);
         for (int i = 0; i < Math.Min(jo, jn); i++) Swap(d, Entity.Joint, j + i, newJ[i]);
         return d;
     }
@@ -114,32 +123,51 @@ public static class GebodMerge
     public static Deck Merge(Deck deck, string ainText, GebodPlacement p, Func<IReadOnlyList<RefSite>, bool> confirm)
     {
         var (segs, jnts) = ParseAin(ainText);
+        var d = Editable(deck);
+        if (p.Mode == GebodMode.Replace) return Replace(d, p.Body, segs, jnts, confirm);
+        int s0 = Start(d, p);
+        // GEBOD numbers its segments 1..NSEGS; the body's segments are now s0..s0+NSEGS-1 (the ain's own numbers, placed).
+        return AddBody(d, s0, segs.Select(SegData).ToList(), jnts.Select(x => JointData(x, s0 - 1)).ToList());
+    }
+
+    /// A copy of deck to edit, after the checks every whole-body operation needs (rigid bodies, B.1 counts, NJNT = NSEG-1).
+    internal static Deck Editable(Deck deck)
+    {
         var d = Deck.Parse(deck.Write());
         d.Path = deck.Path;
         if (d.Card("B.1") is not { Count: 4 } b1) throw new InvalidOperationException("The deck has no B.1 card.");
-        if (b1.Int(3) != 0) throw new NotSupportedException("GEBOD merge into a deck with flexible bodies (B.1 NFBOD > 0, B.3.C cards) is not supported.");
+        if (b1.Int(3) != 0) throw new NotSupportedException("Body operations on a deck with flexible bodies (B.1 NFBOD > 0, B.3.C cards) are not supported.");
         int nseg = Renumber.Count(d, Entity.Segment), njnt = Renumber.Count(d, Entity.Joint);
         if (nseg != d.SegmentCount || njnt != d.JointCount) throw new InvalidOperationException($"B.1 says {d.SegmentCount} segments / {d.JointCount} joints but the deck has {nseg} B.2.a / {njnt} B.3.a lines.");
         if (njnt != Math.Max(nseg - 1, 0)) throw new InvalidOperationException($"The deck has {nseg} segments and {njnt} joints; the solver needs one joint per segment after the first (src/Chain.for:38-43).");
+        return d;
+    }
 
+    /// First segment of a body added at p (Body.cs:627/:990 Yes = before the selected body, No = after it).
+    internal static int Start(Deck d, GebodPlacement p)
+    {
         var starts = BodyStarts(d);
-        int nb = starts.Count, k = p.Body;
+        int nb = starts.Count, k = p.Body, nseg = Renumber.Count(d, Entity.Segment);
         if (p.Mode != GebodMode.Add && (k < 1 || k > nb)) throw new ArgumentOutOfRangeException(nameof(p), $"Body {k} is outside 1..{nb}.");
-        if (p.Mode == GebodMode.Replace) return Replace(d, k, segs, jnts, confirm);
-        int s0 = p.Mode switch
+        return p.Mode switch
         {
             GebodMode.Add => nseg + 1,
             GebodMode.InsertBefore => starts[k - 1],
             _ => k < nb ? starts[k] : nseg + 1,
         };
+    }
+
+    /// ATB 3I InsertBody (Body.cs:1230-1329) + UpdateDueToBody, shared by GEBOD and Body Summary's copied body: segs
+    /// become segments s0.., a NULL joint roots the body when s0 > 1 (the old first body when s0 = 1), then joints
+    /// (the body's own, Seg JNT already final). Works on d in place.
+    internal static Deck AddBody(Deck d, int s0, List<EntityData> segs, List<EntityData> joints)
+    {
         bool others = Renumber.Count(d, Entity.Segment) > 0;
         int bodyIndex = BodyStarts(d).Count(s => s < s0) + 1;
-
-        for (int i = 0; i < segs.Count; i++) Renumber.Insert(d, Entity.Segment, s0 + i, SegData(segs[i]));
-        // GEBOD numbers its segments 1..NSEGS; the body's segments are now s0..s0+NSEGS-1 (the ain's own numbers, placed).
+        for (int i = 0; i < segs.Count; i++) Renumber.Insert(d, Entity.Segment, s0 + i, segs[i]);
         int first = s0 > 1 ? s0 - 1 : 1;
         if (s0 > 1) Renumber.Insert(d, Entity.Joint, first++, NullJoint());
-        for (int i = 0; i < jnts.Count; i++) Renumber.Insert(d, Entity.Joint, first + i, JointData(jnts[i], s0 - 1));
+        for (int i = 0; i < joints.Count; i++) Renumber.Insert(d, Entity.Joint, first + i, joints[i]);
         if (s0 == 1 && others) Renumber.Insert(d, Entity.Joint, segs.Count, NullJoint());   // roots the old first body
 
         // ATBUpdate.UpdateDueToBody: G.1 if missing, and a blank G.2 row at the new body's number.

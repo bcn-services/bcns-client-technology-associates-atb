@@ -47,7 +47,12 @@ public sealed class MainForm : Form
         view.DropDownItems.Add("&Animation (.sa1)...", null, (_, _) => OpenSa1());
         var tools = new ToolStripMenuItem("&Tools");
         tools.DropDownItems.Add("&GEBOD...", null, async (_, _) => await Gebod());
-        menu.Items.AddRange([file, edit, view, tools]);
+        // ATB 3I MainMenu.cs:2698: Model > Body... > Body Summary...
+        var model = new ToolStripMenuItem("&Model");
+        var body = new ToolStripMenuItem("Body...");
+        body.DropDownItems.Add("Body Summary...", null, async (_, _) => await BodySummary());
+        model.DropDownItems.Add(body);
+        menu.Items.AddRange([file, edit, view, model, tools]);
         MainMenuStrip = menu;
 
         var split = new SplitContainer { Dock = DockStyle.Fill, SplitterDistance = 300 };
@@ -460,15 +465,15 @@ public sealed class MainForm : Form
     /// Tools > GEBOD: collect the GEBOD V.2 fields, answer the unmodified Gebodv.exe over stdin in a scratch dir
     /// (it finds GEBOD.DAT and writes GEBOD.ain in the folder named by C:\ATBFIG.SYS), then merge GEBOD.ain's body
     /// into the open deck (a new empty deck when none is open) at the chosen placement, as ATB 3I does.
-    async Task Gebod()
+    async Task Gebod(GebodPlacement? preset = null)
     {
         if (running) return;
         var target = deck ?? GebodMerge.NewDeck();
         int bodies = GebodMerge.BodyStarts(target).Count;
-        using var f = new GebodForm(bodies);
+        using var f = new GebodForm(bodies, preset);
         if (f.ShowDialog(this) != DialogResult.OK || f.Request == null) return;
         var place = f.Placement;
-        if (place.Mode == GebodMode.Replace && !ConfirmReplace()) return;
+        if (preset == null && place.Mode == GebodMode.Replace && !ConfirmReplace()) return;   // Body Summary asked Body.cs:1049 already
         var req = f.Request; var dims = f.BodyDims; string? ain = null;
         var exe = Path.Combine(AppContext.BaseDirectory, "Gebodv.exe");
         var work = Path.Combine(SolverRun.ShortWorkRoot(), "gebod");
@@ -520,6 +525,20 @@ public sealed class MainForm : Form
         if (deck == null) deckPath = null;
         deck = merged; dirty = true;
         ShowDeck();
+    }
+
+    Bodies.Copied? bodyClip;   // Body Summary's Copy Body (3I's clipboard); cleared when another deck is opened
+
+    /// Model > Body... > Body Summary...: ATB 3I's Body Editing Form. Its operations apply as they are done, as 3I's do;
+    /// its GEBOD buttons close it and open the GEBOD form at the placement it chose.
+    async Task BodySummary()
+    {
+        if (running || deck == null) return;
+        using var f = new BodyForm(deck, bodyClip);
+        f.ShowDialog(this);
+        bodyClip = f.Clip;
+        if (f.Changed) { deck = f.Deck; dirty = true; ShowDeck(); }
+        if (f.Gebod is { } p) await Gebod(p);
     }
 
     void OpenSa1()
