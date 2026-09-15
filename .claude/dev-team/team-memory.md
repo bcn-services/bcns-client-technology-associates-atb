@@ -111,3 +111,10 @@
 - **What worked:** Running QA and review in parallel. The placeholder-token placement inside Renumber. A family row-count check that takes its families from Renumber.Groups().
 - **What failed:** In attempt 1 Bodies.Insert/Replace computed shifted references outside Renumber, which violated the guardrail.
 - **Remember next run:** Done-when 1 names 2638_Start_135_, but that deck has one body; the test used 2495_2 instead (a human decision). The buttons follow 3I's on-screen layout, not the order the done-when lists. The GEBOD buttons ask once, where 3I asks twice (in STANDARDS.md). Copied references point at the copy (in STANDARDS.md). Surplus B.3.A becomes -1. The robot never presses Yes on Insert/Replace copied. The UiTests keep a duplicate of 3I's texts. RunDeck now waits 10 s for the "ATB run" box.
+
+## 2026-09-14 — dev-team-auto — Maximum Value List screen (§2 #38)
+- **Outcome:** DONE — 1 attempt — caution: no — team: dt-engineer opus/high — r2-gebod-replace, 741b3f9
+- **What happened:** MaxValues constant (21 Setting rows, ID order per MainMenu.cs:4304), read-only MaxValueForm under File > Setting (MainMenu.cs:2655-2659), robot scenario MaxValueList. 1194 passed; Windows run 34916340763 green. The orchestrator handed back before its engineer finished; the session lead verified: mutations on one value and one name each reddened only Rows_AreTheSettingTableInIdOrder, file restored byte-identical.
+- **What worked:** Literal-rows test independent of the constant; robot types into a cell and asserts 80 stays (the editable-grid mutation guard).
+- **What failed:** The orchestrator returned while its background engineer was still running (no foreground wait on the child).
+- **Remember next run:** 3I's grid is editable (GridMode 4, ATBGrid.cs:614-627, Save → UpdateTable :1520); ours is read-only per TIER2-SCOPE #38 (in STANDARDS.md). Human call: read literally, 3I's hidden-column rules show Value | FileID | ZzzKey with no names; we show Value | Name. Tell orchestrators to block on their engineer, not return "waiting".

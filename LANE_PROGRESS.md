@@ -16,7 +16,7 @@ LANE.md is the contract; this tracks where we are in it — if they disagree, LA
 | GEBOD Replace follows ATB 3I | done (2026-09-14) — GEBOD's Replace now points every card that used the old body's segments and joints at the new body's, in order, as ATB 3I does; only the extra positions of a larger old body are removed. |
 | Segment and joint insert/delete warning | done (2026-09-14) — Adding, pasting or deleting segments and joints now asks ATB 3I's cascade question first; No leaves the deck untouched, and a segment is inserted on its own as in ATB 3I. |
 | Body Summary screen | done (2026-09-14) — Model > Body Summary lists the deck's bodies with ATB 3I's buttons to copy, insert, replace or delete a whole body (or build one with GEBOD), and every card that points at the moved segments and joints follows. |
-| Maximum Value List screen | not started |
+| Maximum Value List screen | done (2026-09-14) — File > Setting opens ATB 3I's Maximum Value List, showing the solver's 21 limits in 3I's order; it is read-only, where 3I let you edit and save them. |
 | Vehicle Motion list and sub-editors | skipped — below stop marker |
 | Function editors | skipped — below stop marker |
 | Run Control form | skipped — below stop marker |

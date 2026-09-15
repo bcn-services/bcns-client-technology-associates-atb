@@ -125,7 +125,7 @@ Context: `docs/HANDOFF-PLAN.md` (sessions, decisions), `docs/TIER2-SCOPE.md` (sc
     - The `Atb.Core` constant holds all 21 `Setting` rows with the export's names and values, in 3I's display order (unit test with the literal rows)
     - `dotnet build app/Atb.sln` passes with the grid read-only and the menu item wired
     - A robot scenario opens the screen and screenshots it, in a green `app-e2e.yml` run (URL in the item report)
-  status: not started
+  status: done
 
 > **⚠️ AUTONOMOUS RUN — STOP HERE**
 
