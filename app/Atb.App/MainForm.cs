@@ -55,6 +55,8 @@ public sealed class MainForm : Form
         var body = new ToolStripMenuItem("Body...");
         body.DropDownItems.Add("Body Summary...", null, async (_, _) => await BodySummary());
         model.DropDownItems.Add(body);
+        // ATB 3I MainMenu.cs:2691-2707: Model > Vehicle Motion..., after Body...
+        model.DropDownItems.Add("Vehicle Motion...", null, (_, _) => VehicleMotion());
         menu.Items.AddRange([file, edit, view, model, tools]);
         MainMenuStrip = menu;
 
@@ -542,6 +544,15 @@ public sealed class MainForm : Form
         bodyClip = f.Clip;
         if (f.Changed) { deck = f.Deck; dirty = true; ShowDeck(); }
         if (f.Gebod is { } p) await Gebod(p);
+    }
+
+    /// Model > Vehicle Motion...: ATB 3I's Vehicle Motion list; each sub-editor's OK applies as 3I's database write does.
+    void VehicleMotion()
+    {
+        if (running || deck == null) return;
+        using var f = new VehicleListForm(deck);
+        f.ShowDialog(this);
+        if (f.Changed) { deck = f.Deck; dirty = true; ShowDeck(); }
     }
 
     void OpenSa1()

@@ -386,6 +386,68 @@ public class Scenarios
         r.Shot("run-completed");
     }
 
+    /// One deck per VehicleType: three client decks (types 5, 1, 4) and the synthetic 2479_2 variants for the types no
+    /// client deck has (0 half sine, 2 six-DOF C.4, 3 spline position).
+    public static IEnumerable<object[]> VehicleDecks() =>
+    [
+        ["cases/2479/2479_2.LIN", 5], ["corpus/2210/2210_1.LIN", 1], ["corpus/2107/2107_A2.LIN", 4],
+        ["app/Atb.Core.Tests/fixtures/vehicles/2479_2_halfsine.LIN", 0],
+        ["app/Atb.Core.Tests/fixtures/vehicles/2479_2_sixdof.LIN", 2],
+        ["app/Atb.Core.Tests/fixtures/vehicles/2479_2_splinepos.LIN", 3],
+    ];
+
+    /// Model > Vehicle Motion...: the list, Edit Vehicle opens the sub-editor VehicleType picks (by its 3I title), one
+    /// value typed (a Motion Data row; Time Duration for the half sine, which has no rows or plot in 3I), Plot, OK,
+    /// Save & Exit, Ctrl+S. Exactly the one deck line holding that value changes.
+    [Theory, MemberData(nameof(VehicleDecks))]
+    public void VehicleMotionEditors(string rel, int type)
+    {
+        var b = Path.GetFileNameWithoutExtension(rel);
+        var copy = Robot.TempCopy(rel, Path.Combine("vehicle", b));
+        var before = File.ReadAllLines(copy);
+        var d0 = Deck.Load(copy);
+        var v = Vehicles.Blocks(d0).First(x => x.Type == type);
+        const string nv = "7.25";
+        string cellName = type == 1 ? "Deceleration Row 1" : "Linear - X Row 1";
+        int want = type == 0 ? d0.Lines.IndexOf(v.C2a) : d0.Lines.IndexOf(Vehicles.Cell(v, 1, 1)!.Value.Line);
+
+        using var r = new Robot("vehicle-" + b, copy);
+        r.Menu("Model", "Vehicle Motion...");
+        var list = BodyWin(r, "Vehicle Motion");
+        r.Shot("vehicle-list");
+        Assert.Equal(Vehicles.TypeNames[type], Robot.Value(BodyCell(r, list, $"Vehicle Type Row {v.Id - 1}")));
+        r.Click(BodyCell(r, list, $"Vehicle Title Row {v.Id - 1}"));
+        r.Click(r.Button(list, "Edit Vehicle"));
+        var ed = BodyWin(r, Vehicles.Title(type));
+        r.Shot("editor-" + Vehicles.Editor(type));
+        if (type == 0) { r.Type(ed, "Time Duration", nv); r.Shot("edited"); }
+        else
+        {
+            r.Click(r.Named(ed, ControlType.TabItem, "Motion  Data"));
+            r.Shot("motion-data");
+            r.Click(BodyCell(r, ed, cellName));
+            FlaUI.Core.Input.Keyboard.Type(nv);
+            Robot.Press(VirtualKeyShort.RETURN);
+            Robot.UntilTrue(() => Robot.Value(BodyCell(r, ed, cellName)) == nv, 10, cellName + " = " + nv);
+            r.Shot("edited");
+            r.Click(BodyCell(r, ed, cellName));   // the plotted column is the current one (VehOpt34)
+            r.Click(r.Button(ed, type == 1 ? "Plot" : "Plot Current Column"));
+            BodyWin(r, "Data Plot");
+            r.Shot("data-plot");
+        }
+        r.Click(r.Button(ed, "OK"));
+        Robot.UntilTrue(() => FindWin(r, Vehicles.Title(type)) == null && FindWin(r, "Data Plot") == null, 10, "sub-editor and plot closed");
+        r.Click(r.Button(list, "Save & Exit"));
+        Robot.UntilTrue(() => FindWin(r, "Vehicle Motion") == null, 10, "Vehicle Motion closed");
+        Assert.Empty(r.Unexpected());
+        r.SaveDeck(copy);
+
+        var after = File.ReadAllLines(copy);
+        Assert.Equal(before.Length, after.Length);
+        Assert.Equal([want], Enumerable.Range(0, before.Length).Where(i => before[i] != after[i]));
+        Assert.Contains(nv, after[want]);
+    }
+
     const string Anim = "ATB animation";
 
     /// View > Animation: open, play, step, frames at 0/50/100%; no window other than main + viewer at any check.
