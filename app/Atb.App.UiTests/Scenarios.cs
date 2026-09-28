@@ -660,22 +660,13 @@ public class Scenarios
                 bool editing = Robot.Poll(() => Robot.ClassOf(combo = r.FocusHwnd()).Contains("COMBOBOX", StringComparison.OrdinalIgnoreCase), 10);
                 var uia = r.A.FocusedElement();
                 r.Log($"SegID after F2: focus hwnd {combo} '{Robot.ClassOf(combo)}'; UIA focused {uia?.ControlType} '{uia?.Name}' hwnd {uia?.Properties.NativeWindowHandle.ValueOrDefault}");
-                bool dropped = false; var how = "";
-                if (editing)
-                {
-                    Robot.Press(VirtualKeyShort.ALT, VirtualKeyShort.DOWN); how = "Alt+Down";
-                    dropped = Robot.Poll(() => Robot.DroppedDown(combo), 3);
-                    if (!dropped)
-                    {
-                        r.Shot("segid-altdown");
-                        var bb = segCell.BoundingRectangle;   // the drop-down button is the cell's right-hand 17 px
-                        FlaUI.Core.Input.Mouse.Click(new System.Drawing.Point(bb.Right - 8, bb.Top + bb.Height / 2)); how = "button click";
-                        dropped = Robot.Poll(() => Robot.DroppedDown(combo), 3);
-                    }
-                }
+                // The list is a top-level "ComboLBox" window: neither the editing control's UIA subtree nor its
+                // ExpandCollapseState shows it (runs 35035065135, 35036307936), so the drop is read from Win32.
+                if (editing) Robot.Press(VirtualKeyShort.ALT, VirtualKeyShort.DOWN);
+                bool dropped = editing && Robot.Poll(() => Robot.DroppedDown(combo), 5);
                 var shown = r.ShownLists();
                 var items = editing ? Robot.ComboItems(combo) : [];
-                r.Log($"SegID list: editing={editing} dropped={dropped} via {how}; shown ComboLBox {shown.Count}; items [{string.Join(",", items)}]; want [{string.Join(",", want)}]");
+                r.Log($"SegID list: editing={editing} dropped={dropped}; shown ComboLBox {shown.Count}; items [{string.Join(",", items)}]; want [{string.Join(",", want)}]");
                 r.Shot("wind-segid-dropdown");
                 Assert.True(editing, "SegID cell entered edit (focus on its combo box)");
                 Assert.True(dropped, "SegID list dropped");
