@@ -63,10 +63,16 @@ public sealed class MainForm : Form
         function.DropDownItems.Add("Joint Stiffness...", null, (_, _) => FunctionList(Functions.Kind.Joint));
         function.DropDownItems.Add("Wind Force...", null, (_, _) => FunctionList(Functions.Kind.Wind));
         model.DropDownItems.Add(function);
+        // ATB 3I MainMenu.cs:2770-2781: Output (between Model and Analysis) > Control Parameter > General / Diagnostic Parameter...
+        var output = new ToolStripMenuItem("Output");
+        var control = new ToolStripMenuItem("Control Parameter");
+        control.DropDownItems.Add("General Parameter...", null, (_, _) => OutputControlDialog(OutputControl.General));
+        control.DropDownItems.Add("Diagnostic Parameter...", null, (_, _) => OutputControlDialog(OutputControl.Diagnostic));
+        output.DropDownItems.Add(control);
         // ATB 3I MainMenu.cs:2826-2832: Analysis (after Model) > Run Control...
         var analysis = new ToolStripMenuItem("Analysis");
         analysis.DropDownItems.Add("Run Control...", null, (_, _) => RunControlDialog());
-        menu.Items.AddRange([file, edit, view, model, analysis, tools]);
+        menu.Items.AddRange([file, edit, view, model, output, analysis, tools]);
         MainMenuStrip = menu;
 
         var split = new SplitContainer { Dock = DockStyle.Fill, SplitterDistance = 300 };
@@ -571,6 +577,17 @@ public sealed class MainForm : Form
         RunControlForm f;
         try { f = new RunControlForm(deck); }
         catch (InvalidOperationException e) { MessageBox.Show(this, e.Message, "Run Control", MessageBoxButtons.OK, MessageBoxIcon.Exclamation); return; }
+        using (f)
+            if (f.ShowDialog(this) == DialogResult.OK && f.Deck.Write() != deck.Write()) { deck = f.Deck; dirty = true; ShowDeck(); }
+    }
+
+    /// Output > Control Parameter > General / Diagnostic Parameter...: ATB 3I's A5 StdTable; OK keeps its Value edits.
+    void OutputControlDialog(int category)
+    {
+        if (running || deck == null) return;
+        OutputControlForm f;
+        try { f = new OutputControlForm(deck, category); }
+        catch (InvalidOperationException e) { MessageBox.Show(this, e.Message, "Output Control", MessageBoxButtons.OK, MessageBoxIcon.Exclamation); return; }
         using (f)
             if (f.ShowDialog(this) == DialogResult.OK && f.Deck.Write() != deck.Write()) { deck = f.Deck; dirty = true; ShowDeck(); }
     }
