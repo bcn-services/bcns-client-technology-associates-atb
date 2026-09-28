@@ -63,7 +63,10 @@ public sealed class MainForm : Form
         function.DropDownItems.Add("Joint Stiffness...", null, (_, _) => FunctionList(Functions.Kind.Joint));
         function.DropDownItems.Add("Wind Force...", null, (_, _) => FunctionList(Functions.Kind.Wind));
         model.DropDownItems.Add(function);
-        menu.Items.AddRange([file, edit, view, model, tools]);
+        // ATB 3I MainMenu.cs:2826-2832: Analysis (after Model) > Run Control...
+        var analysis = new ToolStripMenuItem("Analysis");
+        analysis.DropDownItems.Add("Run Control...", null, (_, _) => RunControlDialog());
+        menu.Items.AddRange([file, edit, view, model, analysis, tools]);
         MainMenuStrip = menu;
 
         var split = new SplitContainer { Dock = DockStyle.Fill, SplitterDistance = 300 };
@@ -559,6 +562,17 @@ public sealed class MainForm : Form
         using var f = new VehicleListForm(deck);
         f.ShowDialog(this);
         if (f.Changed) { deck = f.Deck; dirty = true; ShowDeck(); }
+    }
+
+    /// Analysis > Run Control...: ATB 3I's Run Time Control Parameter Definition; OK keeps its box edits.
+    void RunControlDialog()
+    {
+        if (running || deck == null) return;
+        RunControlForm f;
+        try { f = new RunControlForm(deck); }
+        catch (InvalidOperationException e) { MessageBox.Show(this, e.Message, "Run Control", MessageBoxButtons.OK, MessageBoxIcon.Exclamation); return; }
+        using (f)
+            if (f.ShowDialog(this) == DialogResult.OK && f.Deck.Write() != deck.Write()) { deck = f.Deck; dirty = true; ShowDeck(); }
     }
 
     void FunctionList(Functions.Kind kind)

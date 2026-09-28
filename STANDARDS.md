@@ -37,6 +37,7 @@ Renumber follows ATB 3I `ATB3I.Util/ATBUpdate.cs` except where 3I leaves a refer
 - **FunctionID uniqueness checks E.1 only**: as 3I's `ATB.UsedFunctionID` (`ATBGrid.cs:2237`, `:2536`, `:2741`), a joint or wind ID may repeat an FDF ID.
 - **A new wind function adds F.7.A**: raising D.1.A NWINDF from 0 writes one F.7.A of zeros (one per segment) so the deck still reads; deleting the last wind function removes it. 3I leaves F.7 to its Wind screen.
 - **Paste into a deck with no E.7 section adds nothing**: 3I pastes into its empty E7ac table; ours needs an existing joint function to place the block after; Insert with nothing selected creates the first function (with the E.7 terminator when absent), then Paste works.
+- **Run Control's whole-number boxes refuse decimals**: 3I's TextBox_Leave accepts anything `IsNumeric` (`RunControl.cs:1899`), so "4.5" in Num of Iteration / Num of Output passes; ours gives 3I's "Input must be a number!" and puts the text back, as A.4 tokens 0-1 are integers to the solver. The form needs labelled A.1.A-C / A.3 / A.4 cards (the vendor samples' `A.1b` labels are refused with a message until relabelled); 3I reads its database row instead.
 
 ## Body structure
 - **Body boundaries are NULL joints**: a body starts at segment 1 and at J+1 for each joint J with Seg JNT 0 (`src/Chain.for:38-43`); NJNT = NSEG-1 with no flexible bodies; G.2 has one row per reference segment (`src/input_linear.for:66-70`). Used by GebodMerge.BodyStarts.

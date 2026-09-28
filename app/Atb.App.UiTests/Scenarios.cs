@@ -449,6 +449,49 @@ public class Scenarios
         Assert.Contains(nv, after[want]);
     }
 
+    /// Analysis > Run Control... on 2479_2: OK unedited + Ctrl+S leaves the file byte-identical; then Num of Output typed
+    /// 2000 -> 2500, OK, Ctrl+S: exactly one line (A.4) differs, and within it exactly token 1.
+    [Fact]
+    public void RunControlEditSave()
+    {
+        const string rel = "cases/2479/2479_2.LIN", title = "Run Time Control Parameter Definition";
+        var copy = Robot.TempCopy(rel, "runcontrol");
+        var orig = File.ReadAllBytes(copy);
+        var before = File.ReadAllLines(copy);
+        using var r = new Robot("runcontrol-2479_2", copy);
+        r.Shot("opened");
+
+        r.Menu("Analysis", "Run Control...");
+        var f = BodyWin(r, title);
+        r.Shot("form");
+        Assert.Equal("2000", Robot.Value(r.Named(f, ControlType.Edit, "Num of Output")));
+        Assert.Equal("ATB Gas Range Fall", Robot.Value(r.Named(f, ControlType.Edit, "Comment1")));
+        r.Click(r.Button(f, "OK"));
+        Robot.UntilTrue(() => FindWin(r, title) == null, 10, "Run Control closed");
+        r.SaveDeck(copy);
+        r.Shot("unedited-saved");
+        Assert.True(orig.SequenceEqual(File.ReadAllBytes(copy)), "unedited Run Control OK + Save changed the file's bytes");
+
+        r.Menu("Analysis", "Run Control...");
+        f = BodyWin(r, title);
+        r.Type(f, "Num of Output", "2500");
+        Robot.Press(VirtualKeyShort.TAB);   // 3I's write happens as the box is left
+        r.Shot("edited");
+        r.Click(r.Button(f, "OK"));
+        Robot.UntilTrue(() => FindWin(r, title) == null, 10, "Run Control closed");
+        r.SaveDeck(copy);
+        r.Shot("edited-saved");
+        Assert.Empty(r.Unexpected());
+
+        var after = File.ReadAllLines(copy);
+        Assert.Equal(before.Length, after.Length);
+        Assert.Equal([4], Enumerable.Range(0, before.Length).Where(i => before[i] != after[i]));
+        Assert.Equal("4    2500    0.002    0.0005    0.001    6.25E-05    CARD A.4", after[4]);
+        string[] tb = before[4].Split("    "), ta = after[4].Split("    ");
+        Assert.Equal(tb.Length, ta.Length);
+        Assert.Equal([1], Enumerable.Range(0, tb.Length).Where(i => tb[i] != ta[i]));
+    }
+
     /// FDF on client deck 2479_2 (function 4 polynomial F1, row 3; function 7 tabular F1, row 6). No client deck has an
     /// E.6 or E.7 function, so wind and joint use the synthetic 2479_2 variants (fixtures/functions).
     public static IEnumerable<object[]> FunctionDecks() =>
