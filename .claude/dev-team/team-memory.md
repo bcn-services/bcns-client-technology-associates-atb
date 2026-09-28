@@ -160,3 +160,10 @@
 - **What happened:** Instrumented run (8e44bd3) settled the cause as robot detection: F2 puts focus on `WindowsForms10.ComboBox` (UIA sees the same hwnd), Alt+Down sets CB_GETDROPPEDSTATE true with exactly one visible ComboLBox, items 0–18 = 0..17 body segs + 1 vehicle seg. The app was always fine.
 - **What worked:** Win32 ground truth next to the UIA view in one log line (GetGUIThreadInfo focus, CB_GETDROPPEDSTATE/CB_GETCOUNT/CB_GETLBTEXT, EnumWindows for ComboLBox by pid); unconditional r.Shot before the asserts; `-f filter=` single-scenario dispatch before the full run.
 - **Remember next run:** A DataGridViewComboBox's dropped list is a top-level "ComboLBox" window — neither UIA ExpandCollapseState nor the combo's subtree shows it. Open with F2 then Alt+Down and read it with `Robot.DroppedDown`/`ComboItems`/`ShownLists` (Robot.cs). A `[DllImport]` EnumWindows callback needs a named delegate, not Func.
+
+## 2026-09-28 16:40 — dev-team-auto — Run Control form (§2 #4)
+- **Outcome:** DONE — 1 attempt — caution: no — team: dt-engineer opus/high — r2-s3c, 5257158
+- **What happened:** Atb.Core Cards/RunControl.cs (16 boxes ↔ A.1/A.3/A.4 tokens via Deck.Edit), RunControlForm.cs (3I InitializeComponent layout 664x325), Analysis > Run Control... menu, robot RunControlEditSave. 1283 tests (+7). Windows filtered 36496867754 green, full 36497390376 49/49.
+- **What worked:** byte-compare over all 139 cases/+corpus decks; robot asserts changed-lines == [4], changed-tokens == [1] and a literal A.4 line; mutations (quote-keeping Read, token+1 write) both reddened the named tests.
+- **What failed:** none.
+- **Remember next run:** Human calls in STANDARDS.md: integer boxes reject decimals (3I IsNumeric accepts); vendor sample decks labelled A.1b/A.1c are refused with a message. Menu stays enabled with no deck (3I disables) — same as Vehicle/Function menus. Default button and invalid-number box are unit-tested only, not robot-driven.

@@ -1,42 +1,32 @@
 # Engineer Report
-Branch: r2-s3
-Commits: 2b72d3a (core checkpoint), 64461c8 (forms + robot)
-Gate: dotnet test app/Atb.sln — 1276 passed, 0 failed (fix pass wip checkpoint; was 1272). Atb.App / UiTests not compiled on Mac — unverified until a Windows run
-Fix pass (wip, stopped on time): items 1-7 + both minors coded; NOT done: push, Windows app-e2e run, PNG read, mutation checks (TrimRows guard, Insert SegID post-step)
-Item 7: implemented (decompile Vehicle.cs:589-601 unambiguous: new Vehicle Segment = selected SegID) as a Core post-step on the new C.2.A only; the no-ref-shift-when-SegID<=NSEG part recorded as a STANDARDS.md divergence for Nate
-Windows run: https://github.com/bcn-services/bcns-client-technology-associates-atb/actions/runs/35021573881 — success, 13/13 (S2ParityVehicleOps, S2ParityGridsAndFunctions, VehicleMotionEditors, FunctionEditors)
-PNGs read: Speed label whole; row add 7.25/delete 2 visible; "ATB 3I" Error-icon box; F1+F2 listbox bold Navy; primary refusal; insert confirm; title HATCH — nothing visibly wrong
-**Task:** S2 parity fixes (a)-(h) · **Date:** 2026-09-15
+**Task:** Run Control form (§2 #4) — A.1/A.3/A.4, 16 fields, copying 3I RunControl.cs; Analysis > Run Control...
+**Branch:** r2-s3c
+**Date:** 2026-09-28
 
-## Mutation checks (backup cp, loud diff -q, restore from cp; all restored, diff-clean)
-- Primary refusal (`n == Count` -> `n < 0`) — red: S2ParityTests.VehicleDeleteRefusesThePrimaryAndRenumbersOtherwise
-- Row-count rewrite (token 8 / C.2.B token 2 set to "0") — red: SplineRowAddAndDeleteRewriteC2bToken2, SixDofRowAddAndDeleteRewriteC2aToken8Negative, DecelerationRowAddAndDeleteRewriteC2aToken8
-- First-function terminator dropped — red: FirstWindAndJointFunctionCreateTheirSectionsAndTerminator
-- FDF second-series absence guard removed — red: FdfOtherSeriesComesFromCurvePointsAndIsAbsentWithoutData
-- Vehicle insert bypassing Renumber (raw InsertRange) — red: VehicleInsertGoesThroughRenumber
+Commit: 5257158 (code) — macOS gate 1283 passed / 0 failed (baseline 1276, +7)
+Windows filtered (RunControlEditSave): https://github.com/bcn-services/bcns-client-technology-associates-atb/actions/runs/36496867754 — green, 1/1, 7 PNGs read
+Windows full: https://github.com/bcn-services/bcns-client-technology-associates-atb/actions/runs/36497390376 — green, 49/49 (was 48), tokendiff + cross gates green
+Mutations (cp-backed, restored cmp-identical): M_a Read keeps quotes -> RED BoxesReadTheirTokens_2479 + EveryDeckOpensAndUneditedSaveChangesZeroBytes; M_b A.4 writes token+1 -> RED OneBoxEditRewritesOnlyItsToken(7) + EveryDeckOpens...ZeroBytes
 
 ## Design Decisions
-- Vehicle ops live in Core (Vehicles.Insert/Copy/Delete/Replace/SetTitle/AddRow/DeleteRow); forms only confirm and call them on a Parse(Write()) copy.
-- Replace swaps lines and keeps the old C.2.A token 13; no renumber (3I runs no UpdateSegID there).
-- Grid add = DGV new row (UserAddedRow -> AddRow); delete = Delete key on the current row, no confirm (3I has none).
-- DataPlotForm takes a list of Series with 3I palette index (Blue, Green, Red, Cyan, Gray); the old single-series SetData overloads wrap it.
-- Function Insert with no selection appends (null anchor); a first joint brings `999 ""` E.7.A terminator.
+- Core `RunControl.Fields` = 3I Textbox1..16 order -> (card, token); Read/Set go through `Deck.Edit`, which leaves a line's Raw untouched when the token is unchanged, so unedited OK is zero bytes.
+- Form follows the VehEditor pattern: working copy, each box writes its token on Leave (3I number check on boxes 7-16), OK keeps / Cancel drops; modal, not MDI (existing STANDARDS entry).
+- Layout copied from 3I InitializeComponent coordinates (664x325, Arial 8.25 bold, four 320x72 groups, Default/OK/Cancel at y 288).
+- Analysis menu added after Model, as 3I's top-menu order (Environment/Output not built yet).
 
 ## Files Changed
-- `app/Atb.Core/Cards/Functions.cs` — Insert(before?), End(), JointTerminator, OtherCurve, FormatError/FormatErrorTitle.
-- `app/Atb.Core/Cards/Vehicles.cs` — list ops, 3I texts, SetTitle, AddRow/DeleteRow/SetC3/SetRowCount.
-- `app/Atb.Core.Tests/S2ParityTests.cs` — 10 literal-line tests.
-- `app/Atb.App/VehicleForms.cs` — buttons wired, Title editable, Delete disabled at one vehicle, B re-read, grid add/delete, Speed label 48.
-- `app/Atb.App/FunctionForms.cs` — Insert on empty list, Editing Function listbox Arial 8.25 bold Navy ItemHeight 14, FormatError box, wind SegID combos, FDF Gray second series.
-- `app/Atb.App/DataPlotForm.cs` — multi-series.
-- `app/Atb.App.UiTests/Scenarios.cs` — S2ParityVehicleOps, S2ParityGridsAndFunctions.
-- `STANDARDS.md` — dropped the two vehicle-disabled lines; corrected the Paste/"use Insert first" line.
+- `app/Atb.Core/Cards/RunControl.cs` — new: field map, Read, Set, Defaults(today)
+- `app/Atb.Core.Tests/RunControlTests.cs` — new: literal mapping on 2479_2, zero-byte unedited save over all 139 cases/+corpus decks, one-box edit = one line/one token (3 literal cases), number refusal, Default literals
+- `app/Atb.App/RunControlForm.cs` — new: the 3I form
+- `app/Atb.App/MainForm.cs` — Analysis > Run Control... wiring; missing A card -> message instead of crash
+- `app/Atb.App.UiTests/Scenarios.cs` — `RunControlEditSave`: unedited OK+Save byte compare, then Num of Output 2000->2500, line diff == [4], token diff == [1], literal A.4 line
+- `STANDARDS.md` — divergence: whole-number boxes refuse decimals; form needs labelled A cards
 
-## Findings / Deferred
-- Divergence: 3I renumbers vehicle SegIDs only when SegID > NSEG and gives an inserted vehicle the selected one's SegID; Renumber always uses NSEG+n. Client decks 2645, 2638, 2480_4/5 have vehicle 1 at body segment 16. Not changed (forms must not renumber) — needs a decision.
-- Vehicle Insert writes zeros for C1C2a defaults (ponytail note); 3I reads ATB3iData.mdb defaults.
-- Robot does not exercise a two-series FDF plot (no fixture FDF with both F1 and F2 data); covered by the unit test only.
+## Deferred / Out of Scope
+- Vendor sample decks (`A.1b`/`A.1c` labels) are refused with a message until relabelled; not in done-when (cases/ only).
+- 3I disables the menu item until a file is open; ours is enabled and does nothing without a deck (same as Vehicle Motion / Function).
+- No robot mutation run (core mutations cover the mapping; robot asserts written-out literals).
 
 ## Flags for Reviewer
-- VehEditor.B is now a property that re-scans Vehicles.Blocks on every access (fine at deck sizes; hot in FillGrid loops).
-- Vehicle Delete cascades with `_ => true` (3I asks once up front).
+- Keyboard Enter does not trigger OK (no AcceptButton, as 3I), so Leave always fires before OK's click.
+- Default writes all 16 tokens with DateTime.Now's date (3I DateAndTime.DateString, MM-dd-yyyy); not robot-exercised.
