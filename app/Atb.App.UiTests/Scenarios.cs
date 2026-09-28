@@ -650,18 +650,37 @@ public class Scenarios
             r.Shot(tag + "-first-function");
             if (tag == "wind")
             {
-                r.Click(BodyCell(r, fl, "Velocity SegID Row 0"));
-                Robot.Press(VirtualKeyShort.F2);   // F4 never reached the cell (run 35024899124): begin edit, then drop via UIA
-                FlaUI.Core.AutomationElements.AutomationElement? seg = null;
-                Robot.UntilTrue(() => r.A.FocusedElement() is { } f
-                                      && (seg = f.ControlType == ControlType.ComboBox ? f : f.Parent) is { } p && p.ControlType == ControlType.ComboBox, 10, "SegID editor open");
-                seg!.AsComboBox().Expand();
-                // WinForms' grid combo editing control doesn't report ExpandCollapseState (run 35035065135): assert the shown list itself.
-                Robot.UntilTrue(() => seg.AsComboBox().ExpandCollapseState == FlaUI.Core.Definitions.ExpandCollapseState.Expanded
-                                      || (seg.FindFirstDescendant(r.A.ConditionFactory.ByControlType(ControlType.List)) is { } lst
-                                          && !lst.IsOffscreen && lst.FindAllChildren(r.A.ConditionFactory.ByControlType(ControlType.ListItem)).Length > 1), 10, "SegID list dropped");
-                Assert.True(seg.AsComboBox().Items.Length > 1, "SegID dropdown lists the deck's segments");
+                // 3I's list (ATBGrid E6ab): 0 = none, every body segment, every vehicle segment; the new function's tokens are 0.
+                var want = Enumerable.Range(0, exp.SegmentCount + 1).Concat(Vehicles.Blocks(exp).Select(b => Vehicles.SegId(exp, b)))
+                    .Distinct().Select(i => i.ToString()).ToList();
+                var segCell = BodyCell(r, fl, "Velocity SegID Row 0");
+                r.Click(segCell);
+                Robot.Press(VirtualKeyShort.F2);   // begin edit: the cell's editing control is a native combo box
+                var combo = IntPtr.Zero;
+                bool editing = Robot.Poll(() => Robot.ClassOf(combo = r.FocusHwnd()).Contains("COMBOBOX", StringComparison.OrdinalIgnoreCase), 10);
+                var uia = r.A.FocusedElement();
+                r.Log($"SegID after F2: focus hwnd {combo} '{Robot.ClassOf(combo)}'; UIA focused {uia?.ControlType} '{uia?.Name}' hwnd {uia?.Properties.NativeWindowHandle.ValueOrDefault}");
+                bool dropped = false; var how = "";
+                if (editing)
+                {
+                    Robot.Press(VirtualKeyShort.ALT, VirtualKeyShort.DOWN); how = "Alt+Down";
+                    dropped = Robot.Poll(() => Robot.DroppedDown(combo), 3);
+                    if (!dropped)
+                    {
+                        r.Shot("segid-altdown");
+                        var bb = segCell.BoundingRectangle;   // the drop-down button is the cell's right-hand 17 px
+                        FlaUI.Core.Input.Mouse.Click(new System.Drawing.Point(bb.Right - 8, bb.Top + bb.Height / 2)); how = "button click";
+                        dropped = Robot.Poll(() => Robot.DroppedDown(combo), 3);
+                    }
+                }
+                var shown = r.ShownLists();
+                var items = editing ? Robot.ComboItems(combo) : [];
+                r.Log($"SegID list: editing={editing} dropped={dropped} via {how}; shown ComboLBox {shown.Count}; items [{string.Join(",", items)}]; want [{string.Join(",", want)}]");
                 r.Shot("wind-segid-dropdown");
+                Assert.True(editing, "SegID cell entered edit (focus on its combo box)");
+                Assert.True(dropped, "SegID list dropped");
+                Assert.Single(shown);
+                Assert.Equal(want, items);
                 Robot.Press(VirtualKeyShort.ESCAPE); Robot.Press(VirtualKeyShort.ESCAPE);
             }
             r.Click(BodyCell(r, fl, cell));

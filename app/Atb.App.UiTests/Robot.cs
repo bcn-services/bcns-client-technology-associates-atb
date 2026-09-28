@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Text;
 using FlaUI.Core;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Capturing;
@@ -163,11 +165,50 @@ public sealed class Robot : IDisposable
         Log($"{combo} = {item}");
     }
 
-    static bool Poll(Func<bool> ok, int sec)
+    public static bool Poll(Func<bool> ok, int sec)
     {
         var end = DateTime.UtcNow.AddSeconds(sec);
         do { try { if (ok()) return true; } catch { } Thread.Sleep(200); } while (DateTime.UtcNow < end);
         return false;
+    }
+
+    // Win32 ground truth, independent of what UIA reports: the app's focused window, a combo's drop state and items,
+    // and the app's visible drop-down lists (a combo's list is a top-level "ComboLBox" window, not in its UIA subtree).
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+    [DllImport("user32.dll")] static extern bool GetGUIThreadInfo(uint tid, ref GuiThreadInfo gi);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr SendMessage(IntPtr h, int msg, IntPtr w, StringBuilder? l);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder s, int n);
+    delegate bool EnumProc(IntPtr h, IntPtr l);
+    [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc f, IntPtr l);
+    [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+    [StructLayout(LayoutKind.Sequential)]
+    struct GuiThreadInfo { public int cbSize, flags; public IntPtr active, focus, capture, menuOwner, moveSize, caret; public int l, t, r, b; }
+
+    public IntPtr FocusHwnd()
+    {
+        var gi = new GuiThreadInfo { cbSize = Marshal.SizeOf<GuiThreadInfo>() };
+        return GetGUIThreadInfo(GetWindowThreadProcessId(mainHwnd, out _), ref gi) ? gi.focus : IntPtr.Zero;
+    }
+    public static string ClassOf(IntPtr h) { var sb = new StringBuilder(256); GetClassName(h, sb, sb.Capacity); return sb.ToString(); }
+    public static bool DroppedDown(IntPtr combo) => SendMessage(combo, 0x0157 /* CB_GETDROPPEDSTATE */, IntPtr.Zero, null) != IntPtr.Zero;
+    public static List<string> ComboItems(IntPtr combo)
+    {
+        int n = (int)SendMessage(combo, 0x0146 /* CB_GETCOUNT */, IntPtr.Zero, null);
+        return [.. Enumerable.Range(0, Math.Max(n, 0)).Select(i =>
+        {
+            var sb = new StringBuilder(256); SendMessage(combo, 0x0148 /* CB_GETLBTEXT */, (IntPtr)i, sb); return sb.ToString();
+        })];
+    }
+    public List<IntPtr> ShownLists()
+    {
+        var res = new List<IntPtr>();
+        EnumWindows((h, _) =>
+        {
+            GetWindowThreadProcessId(h, out var pid);
+            if (pid == App.ProcessId && IsWindowVisible(h) && ClassOf(h) == "ComboLBox") res.Add(h);
+            return true;
+        }, IntPtr.Zero);
+        return res;
     }
 
     /// Type into the text box named `name`, replacing its text.
