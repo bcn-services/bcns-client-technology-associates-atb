@@ -160,3 +160,31 @@
 - **What happened:** Instrumented run (8e44bd3) settled the cause as robot detection: F2 puts focus on `WindowsForms10.ComboBox` (UIA sees the same hwnd), Alt+Down sets CB_GETDROPPEDSTATE true with exactly one visible ComboLBox, items 0–18 = 0..17 body segs + 1 vehicle seg. The app was always fine.
 - **What worked:** Win32 ground truth next to the UIA view in one log line (GetGUIThreadInfo focus, CB_GETDROPPEDSTATE/CB_GETCOUNT/CB_GETLBTEXT, EnumWindows for ComboLBox by pid); unconditional r.Shot before the asserts; `-f filter=` single-scenario dispatch before the full run.
 - **Remember next run:** A DataGridViewComboBox's dropped list is a top-level "ComboLBox" window — neither UIA ExpandCollapseState nor the combo's subtree shows it. Open with F2 then Alt+Down and read it with `Robot.DroppedDown`/`ComboItems`/`ShownLists` (Robot.cs). A `[DllImport]` EnumWindows callback needs a named delegate, not Func.
+
+## 2026-09-28 16:40 — dev-team-auto — Run Control form (§2 #4)
+- **Outcome:** DONE — 1 attempt — caution: no — team: dt-engineer opus/high — r2-s3c, 5257158
+- **What happened:** Atb.Core Cards/RunControl.cs (16 boxes ↔ A.1/A.3/A.4 tokens via Deck.Edit), RunControlForm.cs (3I InitializeComponent layout 664x325), Analysis > Run Control... menu, robot RunControlEditSave. 1283 tests (+7). Windows filtered 36496867754 green, full 36497390376 49/49.
+- **What worked:** byte-compare over all 139 cases/+corpus decks; robot asserts changed-lines == [4], changed-tokens == [1] and a literal A.4 line; mutations (quote-keeping Read, token+1 write) both reddened the named tests.
+- **What failed:** none.
+- **Remember next run:** Human calls in STANDARDS.md: integer boxes reject decimals (3I IsNumeric accepts); vendor sample decks labelled A.1b/A.1c are refused with a message. Menu stays enabled with no deck (3I disables) — same as Vehicle/Function menus. Default button and invalid-number box are unit-tested only, not robot-driven.
+
+## 2026-09-28 17:25 — dev-team-auto — General / Diagnostic Output Control Parameters (§2 #5)
+- **Outcome:** DONE — 1 attempt — caution: no — team: dt-engineer opus/high — r2-s3c, 43213fc
+- **What happened:** Atb.Core Cards/OutputControl.cs (all 36 A5Defination rows as a constant, Category 1 = 8 General, 2 = 18 Diagnostic, 0 = 10 hidden), OutputControlForm.cs, menu Output > Control Parameter > General/Diagnostic Parameter... (3I MainMenu.cs:2770-2781), robot OutputControlEditSave. 1292 tests (+9). Windows filtered 36499766274, full 36500200522 50/50.
+- **What worked:** unit test compares the constant to the literal mdb-export CSV rows; robot asserts changed-lines == [5], changed-tokens == [17] with 0→1; mutations (category swap, token index+1) reddened the named tests. `dotnet build -p:EnableWindowsTargeting=true` compiles Atb.App + UiTests on macOS — a free pre-check before a Windows run.
+- **What failed:** none.
+- **Remember next run:** Setting NPRT(4) now adds/removes H.12 at edit time per StdTable.cs:246-262 / FileManager.cs:2234-2248 — no corpus deck has NPRT(4) != 0, so unverified. HIC menu enable from NPRT(4) deferred to §2 #36. Human calls in STANDARDS.md: no add/delete rows, non-integer rejected, modal form. Old card-tree "[A.5]" screen still exists beside the new forms.
+
+## 2026-09-28 17:55 — dev-team-auto — HIC and CSI Definition (§2 #36)
+- **Outcome:** DONE — 1 attempt — caution: no — team: dt-engineer (opus, high) — r2-s3c, code 71c5c35
+- **What happened:** One shared predicate `OutputControl.EnablesHic` (`!= 0 && != 4`, 3I MainMenu.cs:4719) now drives the Output > HIC... menu, OutputControl.Set's H.12 add/remove and Labeler (its duplicate check removed). New `Cards/Hic.cs` + `HicForm.cs` + robot `HicEditSave`. 0 of 139 case/corpus decks enable HIC, so synthetic fixture `fixtures/hic/2479_2_hic.LIN` + vendor ejection.lin carry the tests (count asserted >= 2). macOS 1306/0/0; Windows 51/51 (run 36503146585).
+- **What worked:** Orchestrator mutation re-check (drop `!= 4`) turned 2 HicTests red; engineer's `== 4` flip turned 13 red across HicTests/OutputControl/Labeler/CardGrid, proving one predicate.
+- **What failed:** none.
+- **Remember next run:** 3I writes an edited HIC line labelled `CARD H.12` — CardSchema has no "H.12" entry, so Validate would flag it and Labeler would relabel/truncate to 5 tokens (unfixed, no deck has it). HIC form has no add/delete sets (3I reads back one set only) and Source columns show bare H.1 row numbers, not 3I's multi-column drop-down — both in STANDARDS.md for Nate. 3I's H.12 read/write also needs NSEG > 0; that check stays in Labeler only.
+
+## 2026-09-28 — dev-team-auto — S3 shutdown (lane acceptance + I1 fix)
+- **Outcome:** DONE — lane acceptance C1 moved forward (#4/#5/#36 from menu), C2 no regression, C3 S5 — team: dt-review opus (acceptance), I1 fix inline — r2-s3c
+- **What happened:** Acceptance review found I1: Output Control synced H.12 on every NPRT(4) cell commit, so 1→4→1 in one dialog silently replaced the deck's HIC settings with 3I's default. Moved the sync to OK (`OutputControl.KeepHicInStep`), matching 3I StdTable.cs:244-262.
+- **What worked:** mutation = restore the per-edit sync in Set → Nprt4OffAndOnBeforeOkKeepsH12 + Nprt4KeepsH12InStep red; `dotnet build -p:EnableWindowsTargeting=true` compiles App/UiTests on the Mac.
+- **What failed:** per-item gates can't see intra-dialog sequences; only the acceptance reviewer caught it.
+- **Remember next run:** Open Minors: M1 3I-saved HIC decks carry "CARD H.12" with no CardSchema entry → false Validate warning on Save/Run; M2 a short A.3/A.4/A.5 line throws ArgumentOutOfRange, not the InvalidOperation MainForm catches. I2 (human): LANE criterion 1 says "client decks" but no client deck enables HIC (#36 uses fixture 2479_2_hic.LIN).

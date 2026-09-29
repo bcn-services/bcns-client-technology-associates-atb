@@ -449,6 +449,183 @@ public class Scenarios
         Assert.Contains(nv, after[want]);
     }
 
+    /// Analysis > Run Control... on 2479_2: OK unedited + Ctrl+S leaves the file byte-identical; then Num of Output typed
+    /// 2000 -> 2500, OK, Ctrl+S: exactly one line (A.4) differs, and within it exactly token 1.
+    [Fact]
+    public void RunControlEditSave()
+    {
+        const string rel = "cases/2479/2479_2.LIN", title = "Run Time Control Parameter Definition";
+        var copy = Robot.TempCopy(rel, "runcontrol");
+        var orig = File.ReadAllBytes(copy);
+        var before = File.ReadAllLines(copy);
+        using var r = new Robot("runcontrol-2479_2", copy);
+        r.Shot("opened");
+
+        r.Menu("Analysis", "Run Control...");
+        var f = BodyWin(r, title);
+        r.Shot("form");
+        Assert.Equal("2000", Robot.Value(r.Named(f, ControlType.Edit, "Num of Output")));
+        Assert.Equal("ATB Gas Range Fall", Robot.Value(r.Named(f, ControlType.Edit, "Comment1")));
+        r.Click(r.Button(f, "OK"));
+        Robot.UntilTrue(() => FindWin(r, title) == null, 10, "Run Control closed");
+        r.SaveDeck(copy);
+        r.Shot("unedited-saved");
+        Assert.True(orig.SequenceEqual(File.ReadAllBytes(copy)), "unedited Run Control OK + Save changed the file's bytes");
+
+        r.Menu("Analysis", "Run Control...");
+        f = BodyWin(r, title);
+        r.Type(f, "Num of Output", "2500");
+        Robot.Press(VirtualKeyShort.TAB);   // 3I's write happens as the box is left
+        r.Shot("edited");
+        r.Click(r.Button(f, "OK"));
+        Robot.UntilTrue(() => FindWin(r, title) == null, 10, "Run Control closed");
+        r.SaveDeck(copy);
+        r.Shot("edited-saved");
+        Assert.Empty(r.Unexpected());
+
+        var after = File.ReadAllLines(copy);
+        Assert.Equal(before.Length, after.Length);
+        Assert.Equal([4], Enumerable.Range(0, before.Length).Where(i => before[i] != after[i]));
+        Assert.Equal("4    2500    0.002    0.0005    0.001    6.25E-05    CARD A.4", after[4]);
+        string[] tb = before[4].Split("    "), ta = after[4].Split("    ");
+        Assert.Equal(tb.Length, ta.Length);
+        Assert.Equal([1], Enumerable.Range(0, tb.Length).Where(i => tb[i] != ta[i]));
+    }
+
+    /// Output > Control Parameter > item (Robot.Menu finds one level; the submenu item is clicked here, as OpenBodySummary).
+    static AutomationElement OpenOutputControl(Robot r, string item, string title)
+    {
+        r.Menu("Output", "Control Parameter");
+        var cond = r.A.ConditionFactory.ByControlType(ControlType.MenuItem).And(r.A.ConditionFactory.ByName(item));
+        r.Click(Robot.Until(() => r.A.GetDesktop().FindAllChildren(r.A.ConditionFactory.ByProcessId(r.App.ProcessId))
+            .Select(w => w.FindFirstDescendant(cond)).FirstOrDefault(e => e != null), 10, "menu item " + item));
+        return BodyWin(r, title);
+    }
+
+    /// Output > Control Parameter on 2479_2: General (A5Defination Category 1, 8 rows) and Diagnostic (Category 2, 18 rows)
+    /// in NPRT order; OK unedited + Ctrl+S leaves the file byte-identical; then General's Time History Output (NPRT 18)
+    /// typed 0 -> 1, OK, Ctrl+S: exactly one line (A.5) differs, and within it exactly token 17.
+    [Fact]
+    public void OutputControlEditSave()
+    {
+        const string rel = "cases/2479/2479_2.LIN", gen = "General Output Control Parameter Definition",
+            diag = "Diagnostic Output Control Parameter Definition";
+        var copy = Robot.TempCopy(rel, "outputcontrol");
+        var orig = File.ReadAllBytes(copy);
+        var before = File.ReadAllLines(copy);
+        using var r = new Robot("outputcontrol-2479_2", copy);
+        r.Shot("opened");
+
+        var f = OpenOutputControl(r, "General Parameter...", gen);
+        r.Shot("general");
+        Assert.Equal(("1", "Unit 1 (.SA1) Output Step", "5"),
+            (Robot.Value(BodyCell(r, f, "NPRT Row 0")), Robot.Value(BodyCell(r, f, "Control Parameter Row 0")), Robot.Value(BodyCell(r, f, "Value Row 0"))));
+        Assert.Equal(("35", "Select VIEW Program Version"), (Robot.Value(BodyCell(r, f, "NPRT Row 7")), Robot.Value(BodyCell(r, f, "Control Parameter Row 7"))));
+        Assert.Null(f.FindFirstDescendant(r.A.ConditionFactory.ByName("NPRT Row 8")));
+        Assert.Equal(("18", "0"), (Robot.Value(BodyCell(r, f, "NPRT Row 3")), Robot.Value(BodyCell(r, f, "Value Row 3"))));
+        r.Click(r.Button(f, "OK"));
+        Robot.UntilTrue(() => FindWin(r, gen) == null, 10, "General closed");
+
+        f = OpenOutputControl(r, "Diagnostic Parameter...", diag);
+        r.Shot("diagnostic");
+        Assert.Equal(("2", "Sub ELTIME Table Output"), (Robot.Value(BodyCell(r, f, "NPRT Row 0")), Robot.Value(BodyCell(r, f, "Control Parameter Row 0"))));
+        Assert.Equal(("28", "Diagnostic Output in Sub HPTURB"), (Robot.Value(BodyCell(r, f, "NPRT Row 17")), Robot.Value(BodyCell(r, f, "Control Parameter Row 17"))));
+        Assert.Null(f.FindFirstDescendant(r.A.ConditionFactory.ByName("NPRT Row 18")));
+        r.Click(r.Button(f, "OK"));
+        Robot.UntilTrue(() => FindWin(r, diag) == null, 10, "Diagnostic closed");
+        r.SaveDeck(copy);
+        r.Shot("unedited-saved");
+        Assert.True(orig.SequenceEqual(File.ReadAllBytes(copy)), "unedited Output Control OK + Save changed the file's bytes");
+
+        f = OpenOutputControl(r, "General Parameter...", gen);
+        r.Click(BodyCell(r, f, "Value Row 3"));
+        FlaUI.Core.Input.Keyboard.Type("1");
+        Robot.Press(VirtualKeyShort.RETURN);
+        Robot.UntilTrue(() => Robot.Value(BodyCell(r, f, "Value Row 3")) == "1", 10, "Value Row 3 = 1");
+        r.Shot("edited");
+        r.Click(r.Button(f, "OK"));
+        Robot.UntilTrue(() => FindWin(r, gen) == null, 10, "General closed");
+        r.SaveDeck(copy);
+        r.Shot("edited-saved");
+        Assert.Empty(r.Unexpected());
+
+        var after = File.ReadAllLines(copy);
+        Assert.Equal(before.Length, after.Length);
+        Assert.Equal([5], Enumerable.Range(0, before.Length).Where(i => before[i] != after[i]));
+        string[] tb = before[5].Split("    "), ta = after[5].Split("    ");
+        Assert.Equal(tb.Length, ta.Length);
+        Assert.Equal([17], Enumerable.Range(0, tb.Length).Where(i => tb[i] != ta[i]));
+        Assert.Equal(("0", "1"), (tb[17], ta[17]));
+    }
+
+    /// Opens Output, screenshots it, returns the HIC... item (not clicked).
+    static AutomationElement OutputHicItem(Robot r, string shot)
+    {
+        r.Main.SetForeground();
+        r.Click(Robot.Until(() => r.Main.FindFirstDescendant(r.A.ConditionFactory.ByControlType(ControlType.MenuItem).And(r.A.ConditionFactory.ByName("Output"))), 10, "menu Output"));
+        var cond = r.A.ConditionFactory.ByControlType(ControlType.MenuItem).And(r.A.ConditionFactory.ByName("HIC..."));
+        var item = Robot.Until(() => r.A.GetDesktop().FindAllChildren(r.A.ConditionFactory.ByProcessId(r.App.ProcessId))
+            .Select(w => w.FindFirstDescendant(cond)).FirstOrDefault(e => e != null), 10, "menu item HIC...");
+        r.Shot(shot);
+        return item;
+    }
+
+    /// Output > HIC... on the synthetic 2479_2 with NPRT(4)=1 (no client deck enables HIC): the item is enabled, the form shows
+    /// 3I's default H.12 (Span 0.0360000, BodyID 1); OK unedited + Ctrl+S leaves the file byte-identical; Span 0.015 + OK + Ctrl+S
+    /// changes only the H.12 line. Then NPRT(4) set to 4 via Output Control: HIC... is disabled (3I's rule both ways).
+    [Fact]
+    public void HicEditSave()
+    {
+        const string rel = "app/Atb.Core.Tests/fixtures/hic/2479_2_hic.LIN", title = "HIC and CSI Definition";
+        var copy = Robot.TempCopy(rel, "hic");
+        var orig = File.ReadAllBytes(copy);
+        var before = File.ReadAllLines(copy);
+        using var r = new Robot("hic-2479_2", copy);
+        r.Shot("opened");
+
+        var item = OutputHicItem(r, "output-menu-enabled");
+        Assert.True(item.IsEnabled, "HIC... disabled on a deck with NPRT(4)=1");
+        r.Click(item);
+        var f = BodyWin(r, title);
+        r.Shot("hic-form");
+        Assert.Equal("0.0360000", Robot.Value(r.Named(f, ControlType.Edit, "Span (sec)")));
+        Assert.Equal("1", Robot.Value(BodyCell(r, f, "BodyID Row 0")));
+        Assert.Null(f.FindFirstDescendant(r.A.ConditionFactory.ByName("BodyID Row 1")));
+        r.Click(r.Button(f, "OK"));
+        Robot.UntilTrue(() => FindWin(r, title) == null, 10, "HIC closed");
+        r.SaveDeck(copy);
+        r.Shot("unedited-saved");
+        Assert.True(orig.SequenceEqual(File.ReadAllBytes(copy)), "unedited HIC OK + Save changed the file's bytes");
+
+        r.Click(OutputHicItem(r, "output-menu-again"));
+        f = BodyWin(r, title);
+        r.Type(f, "Span (sec)", "0.015");
+        Robot.Press(VirtualKeyShort.TAB);   // 3I checks the box as it is left
+        r.Shot("edited");
+        r.Click(r.Button(f, "OK"));
+        Robot.UntilTrue(() => FindWin(r, title) == null, 10, "HIC closed");
+        r.SaveDeck(copy);
+        r.Shot("edited-saved");
+        var after = File.ReadAllLines(copy);
+        Assert.Equal(before.Length, after.Length);
+        Assert.Equal([before.Length - 1], Enumerable.Range(0, before.Length).Where(i => before[i] != after[i]));
+        Assert.Equal("1    0.015    1    0    0    Card H.12.a", after[^1]);
+
+        var g = OpenOutputControl(r, "General Parameter...", "General Output Control Parameter Definition");
+        r.Click(BodyCell(r, g, "Value Row 2"));   // NPRT 4, Unit 8 (HIC) Output
+        FlaUI.Core.Input.Keyboard.Type("4");
+        Robot.Press(VirtualKeyShort.RETURN);
+        Robot.UntilTrue(() => Robot.Value(BodyCell(r, g, "Value Row 2")) == "4", 10, "Value Row 2 = 4");
+        r.Shot("nprt4-set-4");
+        r.Click(r.Button(g, "OK"));
+        Robot.UntilTrue(() => FindWin(r, "General Output Control Parameter Definition") == null, 10, "General closed");
+        item = OutputHicItem(r, "output-menu-disabled");
+        bool enabled = item.IsEnabled;
+        Robot.Press(VirtualKeyShort.ESCAPE); Robot.Press(VirtualKeyShort.ESCAPE);
+        Assert.False(enabled, "HIC... still enabled after NPRT(4) = 4");
+        Assert.Empty(r.Unexpected());
+    }
+
     /// FDF on client deck 2479_2 (function 4 polynomial F1, row 3; function 7 tabular F1, row 6). No client deck has an
     /// E.6 or E.7 function, so wind and joint use the synthetic 2479_2 variants (fixtures/functions).
     public static IEnumerable<object[]> FunctionDecks() =>

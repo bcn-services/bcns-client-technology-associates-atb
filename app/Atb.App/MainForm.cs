@@ -63,7 +63,20 @@ public sealed class MainForm : Form
         function.DropDownItems.Add("Joint Stiffness...", null, (_, _) => FunctionList(Functions.Kind.Joint));
         function.DropDownItems.Add("Wind Force...", null, (_, _) => FunctionList(Functions.Kind.Wind));
         model.DropDownItems.Add(function);
-        menu.Items.AddRange([file, edit, view, model, tools]);
+        // ATB 3I MainMenu.cs:2770-2781: Output (between Model and Analysis) > Control Parameter > General / Diagnostic Parameter...
+        var output = new ToolStripMenuItem("Output");
+        var control = new ToolStripMenuItem("Control Parameter");
+        control.DropDownItems.Add("General Parameter...", null, (_, _) => OutputControlDialog(OutputControl.General));
+        control.DropDownItems.Add("Diagnostic Parameter...", null, (_, _) => OutputControlDialog(OutputControl.Diagnostic));
+        output.DropDownItems.Add(control);
+        // ATB 3I MainMenu.cs:2771/2824-2826: Output > HIC..., last item, enabled only while NPRT(4) is not 0 or 4 (:4719-4722, StdTable.cs:249).
+        var hic = new ToolStripMenuItem("HIC...", null, (_, _) => HicDialog()) { Enabled = false };
+        output.DropDownItems.Add(hic);
+        output.DropDownOpening += (_, _) => hic.Enabled = deck != null && OutputControl.HicEnabled(deck);
+        // ATB 3I MainMenu.cs:2826-2832: Analysis (after Model) > Run Control...
+        var analysis = new ToolStripMenuItem("Analysis");
+        analysis.DropDownItems.Add("Run Control...", null, (_, _) => RunControlDialog());
+        menu.Items.AddRange([file, edit, view, model, output, analysis, tools]);
         MainMenuStrip = menu;
 
         var split = new SplitContainer { Dock = DockStyle.Fill, SplitterDistance = 300 };
@@ -559,6 +572,39 @@ public sealed class MainForm : Form
         using var f = new VehicleListForm(deck);
         f.ShowDialog(this);
         if (f.Changed) { deck = f.Deck; dirty = true; ShowDeck(); }
+    }
+
+    /// Analysis > Run Control...: ATB 3I's Run Time Control Parameter Definition; OK keeps its box edits.
+    void RunControlDialog()
+    {
+        if (running || deck == null) return;
+        RunControlForm f;
+        try { f = new RunControlForm(deck); }
+        catch (InvalidOperationException e) { MessageBox.Show(this, e.Message, "Run Control", MessageBoxButtons.OK, MessageBoxIcon.Exclamation); return; }
+        using (f)
+            if (f.ShowDialog(this) == DialogResult.OK && f.Deck.Write() != deck.Write()) { deck = f.Deck; dirty = true; ShowDeck(); }
+    }
+
+    /// Output > Control Parameter > General / Diagnostic Parameter...: ATB 3I's A5 StdTable; OK keeps its Value edits.
+    void OutputControlDialog(int category)
+    {
+        if (running || deck == null) return;
+        OutputControlForm f;
+        try { f = new OutputControlForm(deck, category); }
+        catch (InvalidOperationException e) { MessageBox.Show(this, e.Message, "Output Control", MessageBoxButtons.OK, MessageBoxIcon.Exclamation); return; }
+        using (f)
+            if (f.ShowDialog(this) == DialogResult.OK && f.Deck.Write() != deck.Write()) { deck = f.Deck; dirty = true; ShowDeck(); }
+    }
+
+    /// Output > HIC...: ATB 3I's HIC and CSI Definition; OK keeps its Span and Source edits.
+    void HicDialog()
+    {
+        if (running || deck == null || !OutputControl.HicEnabled(deck)) return;
+        HicForm f;
+        try { f = new HicForm(deck); }
+        catch (InvalidOperationException e) { MessageBox.Show(this, e.Message, HicForm.Title, MessageBoxButtons.OK, MessageBoxIcon.Exclamation); return; }
+        using (f)
+            if (f.ShowDialog(this) == DialogResult.OK && f.Deck.Write() != deck.Write()) { deck = f.Deck; dirty = true; ShowDeck(); }
     }
 
     void FunctionList(Functions.Kind kind)
