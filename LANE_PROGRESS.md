@@ -4,10 +4,24 @@ LANE.md is the contract; this tracks where we are in it — if they disagree, LA
 
 ## Current position
 
-- **Status:** Round 2 (v1: every ATB 3I screen plus the installer), sessions S1 and S2 done; S3 has now spent two one-hour sessions on its first item, S2 parity fixes, and that item is still blocked. Everything it builds works and is confirmed in the Windows screenshots — vehicle Insert/Copy/Delete/Replace, grid rows, the first wind or joint function, the second force-deflection curve, wind segment dropdowns, the vehicle Title, 3I's input-error message. The independent test pass and code review over the fix work both came back clean (1276 macOS tests, every safety check confirmed to fail when deliberately broken; 3 open Important review points, none of them a defect in the app). What is not done is the test robot: across three attempts (`F4`, `F2` plus a UI-automation Expand, and a shown-list check) it still cannot open the wind segment dropdown by itself, so the Windows runs stop at 47 of 48 (35035065135, 35036307936) and the item's "green robot run" condition is unmet. ViewerPlayStep's earlier failure did not repeat. Run Control, Output Control and HIC/CSI were not started.
-- **Next:** S3 again (`docs/HANDOFF-PLAN.md`). The only thing left on S2 parity fixes is the robot's dropdown step — try Alt+Down on the cell being edited, a real mouse click on the dropdown arrow, or looking for the list as a separate pop-up window ("ComboLBox") instead of a part of the form; also pin the assertion to the deck's exact segment count. Budget about 15 minutes per Windows run. Then Run Control, Output Control and HIC/CSI. Carry forward S1's Minor fixes: a copied body must line up with body boundaries before it pastes; the robot's 10 s late-dialog wait; mixed line endings in the delete warning; the robot never answers Yes on Insert/Replace Copied Body; STANDARDS' copied-refs line should name Replace with Copied Body too.
-- **Blockers:** none. Decisions for Nate: the robot tests vehicle types 0, 2 and 3 and the wind and joint functions on decks built from client decks, because no client deck has them; when a vehicle is inserted, 3I leaves references alone if the selected segment is inside the body, but we always shift them, so on 2480_4/5 references to segment 19 and up move by one where 3I leaves them (recorded in STANDARDS.md). From S1: Body Summary's delete check used 2495_2 because 2638 has only one body; the Maximum Value List shows Value and Name and is read-only (3I shows FileID and lets you edit and save); the segment delete warning drops "Delete it anyway?" in favour of 3I's single cascade question; GEBOD Replace of body 1 in a multi-body deck keeps the next body's root joint where 3I drops it; the Body Summary buttons follow 3I's on-screen order, copied bodies' references point at the copy, and a copied body's surplus joints become -1 before removal.
-- **Last updated:** 2026-09-15
+- **Status:** Round 2 (v1: every ATB 3I screen plus the installer), sessions S1, S2 and S3 done. S3 finished all four of its items. The robot's wind dropdown step now passes, and the dropdown always worked in the app; the robot had been looking for the open list in the wrong place. Three screens were added: Run Control (Analysis > Run Control...), the General and Diagnostic output settings (Output > Control Parameter), and HIC and CSI (Output > HIC...). Each saves only what you change, and leaves the deck byte-for-byte untouched when nothing is edited. A final review found that switching the HIC output flag off and back on in one visit dropped the deck's HIC settings; that is fixed, and the HIC settings are now updated once on OK, as 3I does. The Windows robot run is fully green: 51 of 51 screens, plus the GEBOD check (run 36505513328), and every new screenshot was checked. The macOS tests pass: 1307 of 1307.
+- **Next:** S4, Weight Balancing (`docs/HANDOFF-PLAN.md`): move the stop marker below its items, then the Weight Balancing probe and screens. Still open for the lane: every screen opened from the menu in one run, and the installer (S5).
+- **Blockers:** none. Decisions for Nate, from S3:
+  - No client deck turns HIC on, so the HIC screen was tested on a copy of 2479_2 with HIC switched on. Is that acceptable?
+  - Decks saved by 3I carry a "CARD H.12" line the app's deck check doesn't know yet, so Save and Run shows a harmless warning on them.
+  - A deck whose Run Control or output lines are too short shows a crash message instead of a plain error.
+  - Recorded differences from 3I in STANDARDS.md:
+    - Run Control's whole-number boxes refuse decimals.
+    - Run Control refuses vendor decks with the alternate A.1 layout.
+    - The Run Control, Output and HIC menus stay enabled with no deck open.
+    - The output settings screens can't add or delete rows, accept whole numbers only, and open as a separate window that must be closed first.
+    - The HIC screen can't add or delete sets, and its Source dropdowns show plain row numbers.
+
+  Earlier decisions are unchanged:
+  - The robot tests vehicle types 0/2/3 and wind and joint functions on decks built from client decks.
+  - Inserting a vehicle shifts references that 3I leaves alone. On 2480_4/5 this moves references to segment 19 and up.
+  - All the S1 decisions: the Body Summary delete check deck, the read-only Maximum Value List, the single cascade question, the GEBOD Replace root joint, button order, copied-body references, and surplus joints set to -1.
+- **Last updated:** 2026-09-28
 
 ## Round 2 — v1: full ATB 3I parity + installer
 
