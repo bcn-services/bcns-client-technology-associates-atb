@@ -5,22 +5,16 @@ LANE.md is the contract; this tracks where we are in it — if they disagree, LA
 ## Current position
 
 - **Status:** Round 2 (v1: every ATB 3I screen plus the installer), sessions S1, S2 and S3 done. S3 finished all four of its items. The robot's wind dropdown step now passes, and the dropdown always worked in the app; the robot had been looking for the open list in the wrong place. Three screens were added: Run Control (Analysis > Run Control...), the General and Diagnostic output settings (Output > Control Parameter), and HIC and CSI (Output > HIC...). Each saves only what you change, and leaves the deck byte-for-byte untouched when nothing is edited. A final review found that switching the HIC output flag off and back on in one visit dropped the deck's HIC settings; that is fixed, and the HIC settings are now updated once on OK, as 3I does. The Windows robot run is fully green: 51 of 51 screens, plus the GEBOD check (run 36505513328), and every new screenshot was checked. The macOS tests pass: 1307 of 1307.
-- **Next:** S4, Weight Balancing (`docs/HANDOFF-PLAN.md`): move the stop marker below its items, then the Weight Balancing probe and screens. Still open for the lane: every screen opened from the menu in one run, and the installer (S5).
-- **Blockers:** none. Decisions for Nate, from S3:
-  - No client deck turns HIC on, so the HIC screen was tested on a copy of 2479_2 with HIC switched on. Is that acceptable?
-  - Decks saved by 3I carry a "CARD H.12" line the app's deck check doesn't know yet, so Save and Run shows a harmless warning on them.
-  - A deck whose Run Control or output lines are too short shows a crash message instead of a plain error.
-  - Recorded differences from 3I in STANDARDS.md:
-    - Run Control's whole-number boxes refuse decimals.
-    - Run Control refuses vendor decks with the alternate A.1 layout.
-    - The Run Control, Output and HIC menus stay enabled with no deck open.
-    - The output settings screens can't add or delete rows, accept whole numbers only, and open as a separate window that must be closed first.
-    - The HIC screen can't add or delete sets, and its Source dropdowns show plain row numbers.
+- **Next:** Nate's Windows VM click-through (below; the round-2 checks are new). Then S4 (`docs/HANDOFF-PLAN.md`): the two "S3 decisions" items in LANE.md run first, then the Weight Balancing probe and screens. Still open for the lane: every screen opened from the menu in one run, and the installer (S5).
+- **Blockers:** none. Nate decided the three S3 questions on 2026-09-28: match ATB 3I exactly.
+  - The HIC screen stays tested on the 2479_2 copy with HIC switched on, because no client deck turns HIC on. The lane's first criterion now says so.
+  - Decks that 3I saved with a "CARD H.12" line will open and save without a warning, as in 3I. This is a LANE.md item for S4.
+  - A too-short Run Control or output line will behave as it does in 3I, with no crash message. This is also a LANE.md item for S4.
 
   Earlier decisions are unchanged:
   - The robot tests vehicle types 0/2/3 and wind and joint functions on decks built from client decks.
   - Inserting a vehicle shifts references that 3I leaves alone. On 2480_4/5 this moves references to segment 19 and up.
-  - All the S1 decisions: the Body Summary delete check deck, the read-only Maximum Value List, the single cascade question, the GEBOD Replace root joint, button order, copied-body references, and surplus joints set to -1.
+  - The S1–S3 differences from 3I listed in STANDARDS.md were not part of this decision and are still open.
 - **Last updated:** 2026-09-28
 
 ## Round 2 — v1: full ATB 3I parity + installer
@@ -50,7 +44,7 @@ The cloud robot proves the paths it scripts. This pass covers what it can't: dia
 1. `brew install --cask utm crystalfetch`; in CrystalFetch download Windows 11 ARM.
 2. UTM → New → Virtualize → Windows, 4 cores, 8 GB RAM, 64 GB disk; install (skip activation).
 3. In Windows, create a second **standard** (non-admin) user; do every step below as that user.
-4. On the Mac: `GITHUB_TOKEN= gh run download 34735611144 -n app-e2e -D ~/atb-vm` (about 190 MB; the app is in `~/atb-vm/app/`, next to `atb-win32.exe`). Copy `app/` into the UTM shared folder, then to `C:\Users\<user>\ATB`, with `cases/` and `example/` beside it.
+4. On the Mac: `GITHUB_TOKEN= gh run download 36505513328 -n app-e2e -D ~/atb-vm` (about 320 MB, kept until 2026-12-28; a newer green run replaces it; the app is in `~/atb-vm/app/`, next to `atb-win32.exe`). Copy `app/` into the UTM shared folder, then to `C:\Users\<user>\ATB`, with `cases/` and `example/` beside it.
    The app is x64 and the solver 32-bit; Windows on ARM emulates both. The viewer uses software rendering in UTM (slow, correct).
 
 **Checks** (tick each; screenshot anything odd)
@@ -65,6 +59,16 @@ The cloud robot proves the paths it scripts. This pass covers what it can't: dia
 - [ ] Insert a segment and a joint in `2479_2.LIN`, Save, Run: it finishes.
 - [ ] File > New → Tools > GEBOD → 50th-percentile adult male → Add as new body → Save → Run: it finishes. **As the standard user:** note whether GEBOD errors writing `C:\ATBFIG.SYS`.
 - [ ] Open `2479_2.LIN` → GEBOD → Replace body 1: one confirmation lists what will be removed; No leaves the deck unchanged; Yes merges and the deck runs.
+
+**Round 2 checks** (optional side by side: install ATB 3I from `~/atb-work/p0/ATBV3_msi.exe` in the same VM and do each step in both apps)
+- [ ] Model > Body Summary on `2495_2.LIN`: copy, insert, replace and delete a body; every Yes/No question matches 3I's wording; the deck still runs.
+- [ ] File > Setting: the Maximum Value List shows the 21 limits in 3I's order.
+- [ ] Model > Vehicle Motion: open each vehicle's editor and plot; insert, copy, delete and replace a vehicle; add and delete a grid row; edit the Title; Save, reopen, only those lines moved.
+- [ ] Model > Function: a force-deflection function as constant, polynomial and tabular, with both plot curves; create the first wind and joint function on `2479_2.LIN`; the wind SegID dropdown lists the deck's segments.
+- [ ] Type a letter into a number cell: 3I's input-error message appears.
+- [ ] Analysis > Run Control...: all 16 fields; change Num of Output, Save, reopen; Default and Cancel behave as 3I.
+- [ ] Output > Control Parameter > General and Diagnostic: flag names and order match 3I; toggle one flag, Save, only that value changed.
+- [ ] Copy `2479_2.LIN`, set General NPRT 4 to 1, press OK: Output > HIC... enables; set Span, Save, reopen; set NPRT 4 back to 0: HIC... greys out and the HIC line is gone.
 
 ## Round 1b — acceptance-review fixes (shipped 2026-09-12)
 

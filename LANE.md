@@ -6,7 +6,7 @@ Every screen in `docs/TIER2-SCOPE.md` §2, Weight Balancing included, matches AT
 installs it — v1, the build Nate tests before anything goes to the client.
 
 Lane done when:
-- One green `app-e2e.yml` run opens every §2 screen (1–38) from the menu on the client decks, with a screenshot of each
+- One green `app-e2e.yml` run opens every §2 screen (1–38) from the menu on the client decks, with a screenshot of each (#36 HIC/CSI on `app/Atb.Core.Tests/fixtures/hic/2479_2_hic.LIN`: no client deck turns HIC on — Nate, 2026-09-28)
 - In that run, Run through the app on `cases/2479/2479_2.LIN` yields `.aou/.sa1/.t2x` identical to a direct `atb-win32.exe` run of the same deck on the same machine (`cross_gate.py`; the solver's numbers vary by CPU, so the reference outputs are a report, not the gate)
 - The setup `.exe` installs on the `windows-2022` runner and every robot scenario passes against the installed app
 - `PATH="$HOME/atb-work/dotnet:$PATH" dotnet test app/Atb.sln` passes on macOS
@@ -222,6 +222,38 @@ Context: `docs/HANDOFF-PLAN.md` (sessions, decisions), `docs/TIER2-SCOPE.md` (sc
     - The screen opens on every client deck that enables it and saving unedited changes zero bytes (unit test)
     - A robot scenario opens the screen and screenshots it
   status: done (r2-s3c b0de0fe, Windows run 36503146585 51/51) — Output > HIC... enabled by the one predicate `OutputControl.EnablesHic` (NPRT(4) ∉ {0,4}, MainMenu.cs:4719), shared with Output Control's H.12 add/remove and Labeler; no case/corpus deck enables HIC (0/139), so fixture `2479_2_hic.LIN` + vendor ejection.lin carry the tests (count asserted ≥2). Open: 3I labels an edited HIC line `CARD H.12`, which CardSchema lacks (no deck has it yet). Divergences in STANDARDS.md: no HIC-set add/delete, Source columns are plain H.1 row numbers
+
+### S3 decisions (Nate, 2026-09-28: match ATB 3I exactly)
+
+- task: Read and write the HIC card the way ATB 3I does. 3I writes H.12 in two forms (`FileManager.cs:2238-2249`):
+    with HIC sets, `N Span` plus the BodyID triples from `OneDimArrayOutput(..., "H.12", 1, i, 3)`, labelled
+    `CARD H.12`; with none, the default line labelled `Card H.12.a`. Today `CardSchema` has no `H.12` entry, so a
+    deck 3I has re-saved warns "no schema entry for this card" on every Save and Run
+    (lane-acceptance M1, `app/Atb.Core/Lin/Deck.cs:99`). Accept both labels as the one H.12 card, and label any
+    H.12 line the app writes as 3I would label it.
+  guardrails:
+    - Unedited lines stay byte-exact, labels included
+    - `Hic.IsHead`, `Labeler` and `OutputControl.KeepHicInStep` keep sharing one H.12 recogniser
+  done when:
+    - A deck carrying a 3I-style `CARD H.12` line (fixture built from 3I's writer format) validates with no warning, and saving it unedited changes zero bytes (unit test)
+    - The HIC screen opens that deck and shows its Span and BodyID/HIC/CSI rows (unit test on the form's card mapping)
+    - An H.12 line the app writes carries the label 3I's writer gives the same content (unit test with literal lines)
+  status: not started
+
+- task: A short A.3, A.4 or A.5 line behaves as it does in ATB 3I. Today `RunControl.Line()` / `OutputControl.Line()`
+    (`app/Atb.Core/Cards/RunControl.cs:487`, `OutputControl.cs:432`) throw `ArgumentOutOfRangeException`, which
+    `MainForm.cs:130/141` do not catch, so the user sees an unhandled-exception dialog (lane-acceptance M2). Find
+    how 3I's reader and the Run Control / Output Control forms treat a line with too few tokens and copy it; where
+    3I itself fails, show 3I's message text if it has one, or a plain error naming the line, and leave the deck
+    unchanged. Record any divergence in `STANDARDS.md`.
+  guardrails:
+    - No unhandled-exception dialog from any Run Control or Output Control path
+    - Full-length lines behave exactly as today
+  done when:
+    - For a short A.3, A.4 and A.5 line each, opening the matching form does what the item's 3I citation says, asserted by a unit test naming that citation
+    - The deck's bytes are unchanged after the attempt (unit test)
+    - Existing passing tests remain passing
+  status: not started
 
 > **⚠️ AUTONOMOUS RUN — STOP HERE**
 
