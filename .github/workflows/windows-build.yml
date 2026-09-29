@@ -4,9 +4,16 @@
 #
 #   GITHUB_TOKEN= gh workflow run windows-build.yml --repo bcn-services/bcns-client-technology-associates-atb
 #   ... -f win64=true        # optionally also build/verify an x86_64 comparison binary (not shipped)
+# Also called by app-e2e.yml (workflow_call), which consumes the atb-win32-exe artifact.
 name: Windows build + verification
 on:
   workflow_dispatch:
+    inputs:
+      win64:
+        description: "Also build and verify an x86_64 comparison binary (not the deliverable)"
+        type: boolean
+        default: false
+  workflow_call:
     inputs:
       win64:
         description: "Also build and verify an x86_64 comparison binary (not the deliverable)"

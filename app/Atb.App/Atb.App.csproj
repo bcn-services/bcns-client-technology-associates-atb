@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Windows desktop front end. Compiles on macOS (EnableWindowsTargeting); runs on Windows only. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>ATB</AssemblyName>
+    <RootNamespace>Atb.App</RootNamespace>
+    <ApplicationHighDpiMode>SystemAware</ApplicationHighDpiMode>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Atb.Core/Atb.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Unmodified GEBOD body generator (ATB 1.3 patch) and its data file, shipped beside ATB.exe; Tools > GEBOD runs it. -->
+    <None Include="../../frontend/bin/Gebodv.exe;../../frontend/bin/GEBOD.DAT" Link="%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <!-- The solver, beside ATB.exe (MainForm.FindSolver looks there first). Built by windows-build.yml into the repo
+         root (gitignored); publishes without it on machines that have not built it. -->
+    <Content Include="../../atb-win32.exe" Link="atb-win32.exe" Condition="Exists('../../atb-win32.exe')"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+  </ItemGroup>
+</Project>
