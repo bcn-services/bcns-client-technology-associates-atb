@@ -8,7 +8,7 @@ namespace Atb.App;
 
 public sealed class OutputControlForm : Form
 {
-    /// Working copy: each Value cell writes its NPRT token as it is committed; OK keeps it.
+    /// Working copy: each Value cell writes its NPRT token as it is committed; OK brings H.12 in step and keeps it.
     public Deck Deck { get; }
     readonly IReadOnlyList<OutputControl.Row> rows;
     readonly DataGridView grid;
@@ -49,7 +49,7 @@ public sealed class OutputControlForm : Form
 
         var ok = new Button { Text = "OK", Location = new Point(582, 421), Size = new Size(72, 24), Font = bold, Anchor = AnchorStyles.Bottom | AnchorStyles.Right, DialogResult = DialogResult.OK };
         var cancel = new Button { Text = "Cancel", Location = new Point(670, 421), Size = new Size(72, 24), Font = bold, Anchor = AnchorStyles.Bottom | AnchorStyles.Right, DialogResult = DialogResult.Cancel };
-        ok.Click += (_, _) => grid.EndEdit();
+        ok.Click += (_, _) => { grid.EndEdit(); OutputControl.KeepHicInStep(Deck); };
         Controls.Add(grid); Controls.Add(ok); Controls.Add(cancel);
         CancelButton = cancel;
         Width = 393;   // MainMenu.cs:3517 / :3610

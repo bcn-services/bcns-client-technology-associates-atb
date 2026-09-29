@@ -115,7 +115,7 @@ public class OutputControlTests
         Assert.True(File.ReadAllBytes(p).SequenceEqual(Encoding.Latin1.GetBytes(d.Write())));
     }
 
-    /// NPRT(4) not 0/4 adds 3I's default H.12.a (FileManager.cs:2247) at the end; back to 0 removes it: the file is as it was.
+    /// OK with NPRT(4) not 0/4 adds 3I's default H.12.a (FileManager.cs:2247) at the end; OK back at 0 removes it: the file is as it was.
     [Fact]
     public void Nprt4KeepsH12InStep()
     {
@@ -123,12 +123,30 @@ public class OutputControlTests
         var orig = File.ReadAllText(p, Encoding.Latin1);
         var d = Deck.Load(p);
         Assert.Null(OutputControl.Set(d, 4, "1"));
+        Assert.Empty(d.Cards("H.12.A"));   // an edit alone leaves H.12; OK decides
+        OutputControl.KeepHicInStep(d);
         Assert.Equal("1    0.0360000    1    0    0    CARD H.12.a", d.Write().Split("\r\n")[^2]);
         Assert.Null(OutputControl.Set(d, 4, "2"));
+        OutputControl.KeepHicInStep(d);
         Assert.Single(d.Cards("H.12.A"));
         Assert.Null(OutputControl.Set(d, 4, "4"));
+        OutputControl.KeepHicInStep(d);
         Assert.Empty(d.Cards("H.12.A"));
         Assert.Null(OutputControl.Set(d, 4, "0"));
+        OutputControl.KeepHicInStep(d);
+        Assert.Equal(orig, d.Write());
+    }
+
+    /// NPRT(4) 1 → 4 → 1 inside one dialog, then OK: 3I decides once from the final value, so the deck's H.12 survives.
+    [Fact]
+    public void Nprt4OffAndOnBeforeOkKeepsH12()
+    {
+        var p = Case("app/Atb.Core.Tests/fixtures/hic/2479_2_hic.LIN");
+        var orig = File.ReadAllText(p, Encoding.Latin1);
+        var d = Deck.Load(p);
+        Assert.Null(OutputControl.Set(d, 4, "4"));
+        Assert.Null(OutputControl.Set(d, 4, "1"));
+        OutputControl.KeepHicInStep(d);
         Assert.Equal(orig, d.Write());
     }
 }

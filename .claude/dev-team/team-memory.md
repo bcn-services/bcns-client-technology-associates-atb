@@ -181,3 +181,10 @@
 - **What worked:** Orchestrator mutation re-check (drop `!= 4`) turned 2 HicTests red; engineer's `== 4` flip turned 13 red across HicTests/OutputControl/Labeler/CardGrid, proving one predicate.
 - **What failed:** none.
 - **Remember next run:** 3I writes an edited HIC line labelled `CARD H.12` — CardSchema has no "H.12" entry, so Validate would flag it and Labeler would relabel/truncate to 5 tokens (unfixed, no deck has it). HIC form has no add/delete sets (3I reads back one set only) and Source columns show bare H.1 row numbers, not 3I's multi-column drop-down — both in STANDARDS.md for Nate. 3I's H.12 read/write also needs NSEG > 0; that check stays in Labeler only.
+
+## 2026-09-28 — dev-team-auto — S3 shutdown (lane acceptance + I1 fix)
+- **Outcome:** DONE — lane acceptance C1 moved forward (#4/#5/#36 from menu), C2 no regression, C3 S5 — team: dt-review opus (acceptance), I1 fix inline — r2-s3c
+- **What happened:** Acceptance review found I1: Output Control synced H.12 on every NPRT(4) cell commit, so 1→4→1 in one dialog silently replaced the deck's HIC settings with 3I's default. Moved the sync to OK (`OutputControl.KeepHicInStep`), matching 3I StdTable.cs:244-262.
+- **What worked:** mutation = restore the per-edit sync in Set → Nprt4OffAndOnBeforeOkKeepsH12 + Nprt4KeepsH12InStep red; `dotnet build -p:EnableWindowsTargeting=true` compiles App/UiTests on the Mac.
+- **What failed:** per-item gates can't see intra-dialog sequences; only the acceptance reviewer caught it.
+- **Remember next run:** Open Minors: M1 3I-saved HIC decks carry "CARD H.12" with no CardSchema entry → false Validate warning on Save/Run; M2 a short A.3/A.4/A.5 line throws ArgumentOutOfRange, not the InvalidOperation MainForm catches. I2 (human): LANE criterion 1 says "client decks" but no client deck enables HIC (#36 uses fixture 2479_2_hic.LIN).

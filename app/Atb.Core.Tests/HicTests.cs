@@ -32,11 +32,13 @@ public class HicTests(ITestOutputHelper output)
         Assert.Equal("0", off.Card("A.5")!.Tokens[3]);
         Assert.True(OutputControl.HicEnabled(on));
         Assert.False(OutputControl.HicEnabled(off));
-        // The same deck flipped through Output Control follows the rule both ways (and keeps H.12 in step).
+        // The same deck flipped through Output Control follows the rule both ways (and OK keeps H.12 in step).
         Assert.Null(OutputControl.Set(on, 4, "4"));
+        OutputControl.KeepHicInStep(on);
         Assert.False(OutputControl.HicEnabled(on));
         Assert.Empty(on.Lines.Where(Hic.IsLine));
         Assert.Null(OutputControl.Set(off, 4, "3"));
+        OutputControl.KeepHicInStep(off);
         Assert.True(OutputControl.HicEnabled(off));
         Assert.Equal("0.0360000", Hic.Span(off));
     }

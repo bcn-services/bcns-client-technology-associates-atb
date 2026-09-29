@@ -42,15 +42,14 @@ public static class OutputControl
     public static bool HicEnabled(Deck d) => d.Card("A.5") is { Count: > 3 } a && EnablesHic(a.Int(3));
 
     /// Writes NPRT(nprt) (Deck.Edit: only that token, nothing when unchanged). Returns null, or why the text was refused.
-    /// NPRT(4) also keeps H.12 in step as 3I does: OK with 0 or 4 deletes the H12 records (StdTable.cs:246-262), and any
-    /// other value with no H.12 writes 3I's default line (FileManager.cs:2234-2248).
-    public static string? Set(Deck d, int nprt, string text)
+    public static string? Set(Deck d, int nprt, string text) => d.Edit(Line(d), nprt - 1, text);
+
+    /// OK on the A.5 table keeps H.12 in step with the final NPRT(4), once, as 3I does (StdTable.cs:244-262 after
+    /// UpdateTable): 0 or 4 deletes the H12 records; any other value with no H.12 gets 3I's default line
+    /// (FileManager.cs:2234-2248). Per-edit syncing would drop H.12 on 1 → 4 → 1 within one dialog.
+    public static void KeepHicInStep(Deck d)
     {
-        var line = Line(d);
-        var error = d.Edit(line, nprt - 1, text);
-        if (error != null || nprt != 4) return error;
         if (!HicEnabled(d)) d.Lines.RemoveAll(Hic.IsLine);
         else if (!d.Lines.Any(Hic.IsHead)) d.Lines.Add(new DeckLine(["1", "0.0360000", "1", "0", "0"], Labeler.LabelFor("H.12.A")));
-        return null;
     }
 }
