@@ -174,3 +174,10 @@
 - **What worked:** unit test compares the constant to the literal mdb-export CSV rows; robot asserts changed-lines == [5], changed-tokens == [17] with 0→1; mutations (category swap, token index+1) reddened the named tests. `dotnet build -p:EnableWindowsTargeting=true` compiles Atb.App + UiTests on macOS — a free pre-check before a Windows run.
 - **What failed:** none.
 - **Remember next run:** Setting NPRT(4) now adds/removes H.12 at edit time per StdTable.cs:246-262 / FileManager.cs:2234-2248 — no corpus deck has NPRT(4) != 0, so unverified. HIC menu enable from NPRT(4) deferred to §2 #36. Human calls in STANDARDS.md: no add/delete rows, non-integer rejected, modal form. Old card-tree "[A.5]" screen still exists beside the new forms.
+
+## 2026-09-28 17:55 — dev-team-auto — HIC and CSI Definition (§2 #36)
+- **Outcome:** DONE — 1 attempt — caution: no — team: dt-engineer (opus, high) — r2-s3c, code 71c5c35
+- **What happened:** One shared predicate `OutputControl.EnablesHic` (`!= 0 && != 4`, 3I MainMenu.cs:4719) now drives the Output > HIC... menu, OutputControl.Set's H.12 add/remove and Labeler (its duplicate check removed). New `Cards/Hic.cs` + `HicForm.cs` + robot `HicEditSave`. 0 of 139 case/corpus decks enable HIC, so synthetic fixture `fixtures/hic/2479_2_hic.LIN` + vendor ejection.lin carry the tests (count asserted >= 2). macOS 1306/0/0; Windows 51/51 (run 36503146585).
+- **What worked:** Orchestrator mutation re-check (drop `!= 4`) turned 2 HicTests red; engineer's `== 4` flip turned 13 red across HicTests/OutputControl/Labeler/CardGrid, proving one predicate.
+- **What failed:** none.
+- **Remember next run:** 3I writes an edited HIC line labelled `CARD H.12` — CardSchema has no "H.12" entry, so Validate would flag it and Labeler would relabel/truncate to 5 tokens (unfixed, no deck has it). HIC form has no add/delete sets (3I reads back one set only) and Source columns show bare H.1 row numbers, not 3I's multi-column drop-down — both in STANDARDS.md for Nate. 3I's H.12 read/write also needs NSEG > 0; that check stays in Labeler only.
