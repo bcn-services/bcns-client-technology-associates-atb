@@ -34,6 +34,13 @@ public static class OutputControl
 
     public static string Value(Deck d, int nprt) => Line(d).Str(nprt - 1);
 
+    /// ATB 3I's one NPRT(4) test, `!= 0 && != 4`: the Output > HIC... menu (MainMenu.cs:4719-4722 on open, StdTable.cs:249 on
+    /// A5 OK) and the H.12 card (FileManager.cs:1031 read, :2238 write — both also need NSEG > 0, Labeler's num5).
+    public static bool EnablesHic(int nprt4) => nprt4 != 0 && nprt4 != 4;
+
+    /// The deck's NPRT(4) enables HIC (false when A.5 is missing or short).
+    public static bool HicEnabled(Deck d) => d.Card("A.5") is { Count: > 3 } a && EnablesHic(a.Int(3));
+
     /// Writes NPRT(nprt) (Deck.Edit: only that token, nothing when unchanged). Returns null, or why the text was refused.
     /// NPRT(4) also keeps H.12 in step as 3I does: OK with 0 or 4 deletes the H12 records (StdTable.cs:246-262), and any
     /// other value with no H.12 writes 3I's default line (FileManager.cs:2234-2248).
@@ -42,9 +49,8 @@ public static class OutputControl
         var line = Line(d);
         var error = d.Edit(line, nprt - 1, text);
         if (error != null || nprt != 4) return error;
-        int v = line.Int(3);
-        if (v is 0 or 4) d.Lines.RemoveAll(l => l.Is("H.12.A") || l.Is("H.12.B"));
-        else if (!d.Lines.Any(l => l.Is("H.12.A"))) d.Lines.Add(new DeckLine(["1", "0.0360000", "1", "0", "0"], Labeler.LabelFor("H.12.A")));
+        if (!HicEnabled(d)) d.Lines.RemoveAll(Hic.IsLine);
+        else if (!d.Lines.Any(Hic.IsHead)) d.Lines.Add(new DeckLine(["1", "0.0360000", "1", "0", "0"], Labeler.LabelFor("H.12.A")));
         return null;
     }
 }

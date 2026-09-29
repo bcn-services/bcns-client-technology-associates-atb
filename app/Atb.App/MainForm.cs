@@ -69,6 +69,10 @@ public sealed class MainForm : Form
         control.DropDownItems.Add("General Parameter...", null, (_, _) => OutputControlDialog(OutputControl.General));
         control.DropDownItems.Add("Diagnostic Parameter...", null, (_, _) => OutputControlDialog(OutputControl.Diagnostic));
         output.DropDownItems.Add(control);
+        // ATB 3I MainMenu.cs:2771/2824-2826: Output > HIC..., last item, enabled only while NPRT(4) is not 0 or 4 (:4719-4722, StdTable.cs:249).
+        var hic = new ToolStripMenuItem("HIC...", null, (_, _) => HicDialog()) { Enabled = false };
+        output.DropDownItems.Add(hic);
+        output.DropDownOpening += (_, _) => hic.Enabled = deck != null && OutputControl.HicEnabled(deck);
         // ATB 3I MainMenu.cs:2826-2832: Analysis (after Model) > Run Control...
         var analysis = new ToolStripMenuItem("Analysis");
         analysis.DropDownItems.Add("Run Control...", null, (_, _) => RunControlDialog());
@@ -588,6 +592,17 @@ public sealed class MainForm : Form
         OutputControlForm f;
         try { f = new OutputControlForm(deck, category); }
         catch (InvalidOperationException e) { MessageBox.Show(this, e.Message, "Output Control", MessageBoxButtons.OK, MessageBoxIcon.Exclamation); return; }
+        using (f)
+            if (f.ShowDialog(this) == DialogResult.OK && f.Deck.Write() != deck.Write()) { deck = f.Deck; dirty = true; ShowDeck(); }
+    }
+
+    /// Output > HIC...: ATB 3I's HIC and CSI Definition; OK keeps its Span and Source edits.
+    void HicDialog()
+    {
+        if (running || deck == null || !OutputControl.HicEnabled(deck)) return;
+        HicForm f;
+        try { f = new HicForm(deck); }
+        catch (InvalidOperationException e) { MessageBox.Show(this, e.Message, HicForm.Title, MessageBoxButtons.OK, MessageBoxIcon.Exclamation); return; }
         using (f)
             if (f.ShowDialog(this) == DialogResult.OK && f.Deck.Write() != deck.Write()) { deck = f.Deck; dirty = true; ShowDeck(); }
     }

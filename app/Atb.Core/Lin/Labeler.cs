@@ -173,7 +173,7 @@ public static class Labeler
             for (int k = I(Take("H.10.A", 1), 0, "H.10.A"); k > 0; k--) { Line("H.10.B"); Take("H.10.C", 10); }
             if (nrt > 0) Line("H.11");
             int nprt4 = I(a5, 3, "A.5");
-            if (num5 > 0 && nprt4 != 0 && nprt4 != 4)
+            if (num5 > 0 && OutputControl.EnablesHic(nprt4))
                 // ponytail: NHIC > 1 assumed wrapped as 3-value H.12.B lines; ATB 3I writes them on one line — not in corpus.
                 for (int k = I(Take("H.12.A", 5), 0, "H.12.A") - 1; k > 0; k--) Take("H.12.B", 3);
 

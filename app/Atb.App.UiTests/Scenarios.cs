@@ -558,6 +558,74 @@ public class Scenarios
         Assert.Equal(("0", "1"), (tb[17], ta[17]));
     }
 
+    /// Opens Output, screenshots it, returns the HIC... item (not clicked).
+    static AutomationElement OutputHicItem(Robot r, string shot)
+    {
+        r.Main.SetForeground();
+        r.Click(Robot.Until(() => r.Main.FindFirstDescendant(r.A.ConditionFactory.ByControlType(ControlType.MenuItem).And(r.A.ConditionFactory.ByName("Output"))), 10, "menu Output"));
+        var cond = r.A.ConditionFactory.ByControlType(ControlType.MenuItem).And(r.A.ConditionFactory.ByName("HIC..."));
+        var item = Robot.Until(() => r.A.GetDesktop().FindAllChildren(r.A.ConditionFactory.ByProcessId(r.App.ProcessId))
+            .Select(w => w.FindFirstDescendant(cond)).FirstOrDefault(e => e != null), 10, "menu item HIC...");
+        r.Shot(shot);
+        return item;
+    }
+
+    /// Output > HIC... on the synthetic 2479_2 with NPRT(4)=1 (no client deck enables HIC): the item is enabled, the form shows
+    /// 3I's default H.12 (Span 0.0360000, BodyID 1); OK unedited + Ctrl+S leaves the file byte-identical; Span 0.015 + OK + Ctrl+S
+    /// changes only the H.12 line. Then NPRT(4) set to 4 via Output Control: HIC... is disabled (3I's rule both ways).
+    [Fact]
+    public void HicEditSave()
+    {
+        const string rel = "app/Atb.Core.Tests/fixtures/hic/2479_2_hic.LIN", title = "HIC and CSI Definition";
+        var copy = Robot.TempCopy(rel, "hic");
+        var orig = File.ReadAllBytes(copy);
+        var before = File.ReadAllLines(copy);
+        using var r = new Robot("hic-2479_2", copy);
+        r.Shot("opened");
+
+        var item = OutputHicItem(r, "output-menu-enabled");
+        Assert.True(item.IsEnabled, "HIC... disabled on a deck with NPRT(4)=1");
+        r.Click(item);
+        var f = BodyWin(r, title);
+        r.Shot("hic-form");
+        Assert.Equal("0.0360000", Robot.Value(r.Named(f, ControlType.Edit, "Span (sec)")));
+        Assert.Equal("1", Robot.Value(BodyCell(r, f, "BodyID Row 0")));
+        Assert.Null(f.FindFirstDescendant(r.A.ConditionFactory.ByName("BodyID Row 1")));
+        r.Click(r.Button(f, "OK"));
+        Robot.UntilTrue(() => FindWin(r, title) == null, 10, "HIC closed");
+        r.SaveDeck(copy);
+        r.Shot("unedited-saved");
+        Assert.True(orig.SequenceEqual(File.ReadAllBytes(copy)), "unedited HIC OK + Save changed the file's bytes");
+
+        r.Click(OutputHicItem(r, "output-menu-again"));
+        f = BodyWin(r, title);
+        r.Type(f, "Span (sec)", "0.015");
+        Robot.Press(VirtualKeyShort.TAB);   // 3I checks the box as it is left
+        r.Shot("edited");
+        r.Click(r.Button(f, "OK"));
+        Robot.UntilTrue(() => FindWin(r, title) == null, 10, "HIC closed");
+        r.SaveDeck(copy);
+        r.Shot("edited-saved");
+        var after = File.ReadAllLines(copy);
+        Assert.Equal(before.Length, after.Length);
+        Assert.Equal([before.Length - 1], Enumerable.Range(0, before.Length).Where(i => before[i] != after[i]));
+        Assert.Equal("1    0.015    1    0    0    Card H.12.a", after[^1]);
+
+        var g = OpenOutputControl(r, "General Parameter...", "General Output Control Parameter Definition");
+        r.Click(BodyCell(r, g, "Value Row 2"));   // NPRT 4, Unit 8 (HIC) Output
+        FlaUI.Core.Input.Keyboard.Type("4");
+        Robot.Press(VirtualKeyShort.RETURN);
+        Robot.UntilTrue(() => Robot.Value(BodyCell(r, g, "Value Row 2")) == "4", 10, "Value Row 2 = 4");
+        r.Shot("nprt4-set-4");
+        r.Click(r.Button(g, "OK"));
+        Robot.UntilTrue(() => FindWin(r, "General Output Control Parameter Definition") == null, 10, "General closed");
+        item = OutputHicItem(r, "output-menu-disabled");
+        bool enabled = item.IsEnabled;
+        Robot.Press(VirtualKeyShort.ESCAPE); Robot.Press(VirtualKeyShort.ESCAPE);
+        Assert.False(enabled, "HIC... still enabled after NPRT(4) = 4");
+        Assert.Empty(r.Unexpected());
+    }
+
     /// FDF on client deck 2479_2 (function 4 polynomial F1, row 3; function 7 tabular F1, row 6). No client deck has an
     /// E.6 or E.7 function, so wind and joint use the synthetic 2479_2 variants (fixtures/functions).
     public static IEnumerable<object[]> FunctionDecks() =>
