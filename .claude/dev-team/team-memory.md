@@ -167,3 +167,10 @@
 - **What worked:** byte-compare over all 139 cases/+corpus decks; robot asserts changed-lines == [4], changed-tokens == [1] and a literal A.4 line; mutations (quote-keeping Read, token+1 write) both reddened the named tests.
 - **What failed:** none.
 - **Remember next run:** Human calls in STANDARDS.md: integer boxes reject decimals (3I IsNumeric accepts); vendor sample decks labelled A.1b/A.1c are refused with a message. Menu stays enabled with no deck (3I disables) — same as Vehicle/Function menus. Default button and invalid-number box are unit-tested only, not robot-driven.
+
+## 2026-09-28 17:25 — dev-team-auto — General / Diagnostic Output Control Parameters (§2 #5)
+- **Outcome:** DONE — 1 attempt — caution: no — team: dt-engineer opus/high — r2-s3c, 43213fc
+- **What happened:** Atb.Core Cards/OutputControl.cs (all 36 A5Defination rows as a constant, Category 1 = 8 General, 2 = 18 Diagnostic, 0 = 10 hidden), OutputControlForm.cs, menu Output > Control Parameter > General/Diagnostic Parameter... (3I MainMenu.cs:2770-2781), robot OutputControlEditSave. 1292 tests (+9). Windows filtered 36499766274, full 36500200522 50/50.
+- **What worked:** unit test compares the constant to the literal mdb-export CSV rows; robot asserts changed-lines == [5], changed-tokens == [17] with 0→1; mutations (category swap, token index+1) reddened the named tests. `dotnet build -p:EnableWindowsTargeting=true` compiles Atb.App + UiTests on macOS — a free pre-check before a Windows run.
+- **What failed:** none.
+- **Remember next run:** Setting NPRT(4) now adds/removes H.12 at edit time per StdTable.cs:246-262 / FileManager.cs:2234-2248 — no corpus deck has NPRT(4) != 0, so unverified. HIC menu enable from NPRT(4) deferred to §2 #36. Human calls in STANDARDS.md: no add/delete rows, non-integer rejected, modal form. Old card-tree "[A.5]" screen still exists beside the new forms.
