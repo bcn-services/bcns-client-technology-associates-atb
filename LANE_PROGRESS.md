@@ -20,9 +20,9 @@ LANE.md is the contract; this tracks where we are in it — if they disagree, LA
 | Vehicle Motion list and sub-editors | done (2026-09-14) — Model > Vehicle Motion lists the deck's vehicles and opens each in ATB 3I's half-sine, deceleration, 6-DOF or spline editor with its data plot; editing a row changes only that deck line. Insert/Copy/Delete/Replace Vehicle and adding or deleting grid rows are not built yet (disabled). |
 | Function editors | done (2026-09-14) — Model > Function > General FDF, Joint Stiffness and Wind Force open ATB 3I's editors (force-deflection as constant, polynomial or tabular) with a Data Plot drawn from the solver's own function math; saving an unedited function changes no bytes. Wind functions have no plot (3I has none), and no client deck has wind or joint functions, so those were tested on decks built from 2479_2. |
 | S2 parity fixes | done (2026-09-28) — Vehicle Motion can insert, copy, delete and replace vehicles and add or delete grid rows; the first wind or joint function can be created; the force-deflection plot shows 3I's second curve; wind segments are dropdowns listing the deck's segments; the vehicle Title is editable; and bad input shows 3I's message. The Windows robot run is now fully green (48 of 48). The dropdown always worked in the app. The robot was looking for the open list in the wrong place. |
-| Run Control form | not started |
-| Output Control Parameters | not started |
-| HIC and CSI Definition | not started |
+| Run Control form | done (2026-09-28) — The Run Control screen (Analysis > Run Control...) shows 3I's 16 settings for units, gravity, integrator and output, saves only the value you change, and leaves every deck untouched when nothing is edited. |
+| Output Control Parameters | done (2026-09-28) — The General and Diagnostic output settings screens (Output > Control Parameter) list 3I's flags by name and in 3I's two groups, and saving changes only the flag you switch. |
+| HIC and CSI Definition | done (2026-09-28) — The HIC and CSI screen (Output > HIC...) opens only when the deck's output settings ask for HIC, as in 3I, and saving without edits changes nothing; no client deck uses HIC, so it was checked on a test copy. |
 | Weight Balancing probe | skipped — below stop marker |
 | Weight Balancing screens | skipped — below stop marker |
 | Installer | skipped — below stop marker |

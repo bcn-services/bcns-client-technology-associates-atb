@@ -203,7 +203,7 @@ Context: `docs/HANDOFF-PLAN.md` (sessions, decisions), `docs/TIER2-SCOPE.md` (sc
   done when:
     - The form opens on every `cases/` deck and saving unedited changes zero bytes (unit test on the form's field ↔ card mapping)
     - A robot scenario edits one field, saves, and the saved deck differs in exactly that token
-  status: not started
+  status: done (r2-s3c 086559e, Windows run 36497390376 49/49) — 16 fields on A.1/A.3/A.4; unedited save byte-identical on all 139 cases/+corpus decks; robot RunControlEditSave changes only line 4 token 1. Divergences in STANDARDS.md: integer boxes reject decimals, A.1b/A.1c vendor decks refused, menu enabled with no deck
 
 - task: General / Diagnostic Output Control Parameters (§2 #5) — the A.5 grid of 36 NPRT flags in 3I's two
     categories, names from the `A5Defination` table (copied as an `Atb.Core` constant).
@@ -212,7 +212,7 @@ Context: `docs/HANDOFF-PLAN.md` (sessions, decisions), `docs/TIER2-SCOPE.md` (sc
   done when:
     - The constant matches `mdb-export ATB3iData.mdb A5Defination` (unit test with literal rows)
     - A robot scenario toggles one flag, saves, and the saved deck differs in exactly that token
-  status: not started
+  status: done (r2-s3c 43213fc, Windows run 36500200522 50/50) — `OutputControl` constant = all 36 A5Defination rows (8 General, 18 Diagnostic, 10 category-0 hidden); forms under Output > Control Parameter; robot OutputControlEditSave changes only NPRT 18 (token 17). Editing NPRT(4) adds/removes H.12 (StdTable.cs:246-262) — no deck has NPRT(4)≠0, so unverified on a real deck. Divergences in STANDARDS.md: no row add/delete, non-integer rejected, modal form, H.12 updated on edit
 
 - task: HIC and CSI Definition (§2 #36) — H.12 form + grid, copying `HIC.cs`, enabled by NPRT(4).
   guardrails:
@@ -221,7 +221,7 @@ Context: `docs/HANDOFF-PLAN.md` (sessions, decisions), `docs/TIER2-SCOPE.md` (sc
     - The enablement rule is an `Atb.Core` function unit-tested on a deck with NPRT(4) on and off
     - The screen opens on every client deck that enables it and saving unedited changes zero bytes (unit test)
     - A robot scenario opens the screen and screenshots it
-  status: not started
+  status: done (r2-s3c b0de0fe, Windows run 36503146585 51/51) — Output > HIC... enabled by the one predicate `OutputControl.EnablesHic` (NPRT(4) ∉ {0,4}, MainMenu.cs:4719), shared with Output Control's H.12 add/remove and Labeler; no case/corpus deck enables HIC (0/139), so fixture `2479_2_hic.LIN` + vendor ejection.lin carry the tests (count asserted ≥2). Open: 3I labels an edited HIC line `CARD H.12`, which CardSchema lacks (no deck has it yet). Divergences in STANDARDS.md: no HIC-set add/delete, Source columns are plain H.1 row numbers
 
 > **⚠️ AUTONOMOUS RUN — STOP HERE**
 
